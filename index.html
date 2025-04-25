@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vanilla JS SVG 3D Engine</title>
+  <style>
+    html,body { margin:0; padding:0; overflow:hidden; height:100vh; font-family:Arial, sans-serif; color:#eee; background:#222; }
+    body{ display:flex; flex-direction:column; }
+    #topbar{ height:26px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:14px; }
+    #topbar .menu{ margin-right:12px; cursor:pointer; user-select:none; }
+    #topbar .menu:hover{ background:#444; }
+    #main{ flex:1; display:flex; min-height:0; }
+    #toolbar{ width:40px; background:#3a3a3a; display:flex; flex-direction:column; align-items:center; padding-top:4px; }
+    #toolbar button{ width:24px; height:24px; margin:4px 0; background:#555; border:1px solid #000; cursor:pointer; }
+    #toolbar button:hover{ background:#777; }
+    #viewport{ flex:1; position:relative; background:#23232a; }
+    #svg3d{ width:100%; height:100%; display:block; }
+    #sidebar{ width:260px; background:#3a3a3a; padding:8px; overflow:auto; font-size:13px; }
+    #controls label{ display:block; margin:4px 0; }
+    #controls input[type="range"]{ width:100%; }
+    #camDebug{ margin-top:8px; background:#222a; padding:4px; border-radius:4px; color:#9cf; }
+    #bottombar{ height:22px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <span class="menu">File</span><span class="menu">Edit</span><span class="menu">Add</span><span class="menu">View</span><span class="menu">Select</span><span class="menu">Object</span>
+  </div>
+  <div id="main">
+    <div id="toolbar">
+      <button title="Select">S</button>
+      <button title="Move">M</button>
+      <button title="Scale">SC</button>
+    </div>
+    <div id="viewport">
+      <svg id="svg3d"></svg>
+    </div>
+    <div id="sidebar">
+      <h3 style="margin:0 0 8px 0;">Controls</h3>
+      <div id="controls">
+        <label><input type="checkbox" id="wireframe"> Wireframe</label>
+        <label>Zoom <input type="range" id="zoom" min="200" max="2000" value="800"></label>
+        <span id="zoomVal" style="display:block;">800</span>
+        <label>Sphere Segments <input type="range" id="segments" min="6" max="48" value="16"></label>
+        <span id="segVal" style="display:block;">16</span>
+      </div>
+      <div id="camDebug"></div>
+    </div>
+  </div>
+  <div id="bottombar">Ready</div>
+
+<script>
+// =============================================
+// Minimal 3D Engine (SVG Renderer)              
+// =============================================
+
+// ---------- Vector3 Utility ------------------
+class Vec3 {
+  constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
+  add(v){return new Vec3(this.x+v.x,this.y+v.y,this.z+v.z);}  
+  sub(v){return new Vec3(this.x-v.x,this.y-v.y,this.z-v.z);}  
+  mul(s){return new Vec3(this.x*s,this.y*s,this.z*s);}        
+  dot(v){return this.x*v.x+this.y*v.y+this.z*v.z;}            
+  cross(v){return new Vec3(
+    this.y*v.z - this.z*v.y,
+    this.z*v.x - this.x*v.z,
+    this.x*v.y - this.y*v.x
+  );}
+  length(){return Math.sqrt(this.x*this.x+this.y*this.y+this.z*this.z);} 
+  normalize(){const len=this.length()||1; return this.mul(1/len);}        
+}
+
+// ---------- Geometry Generators --------------
+function createCube(size=1){
+  const s=size*0.5;
+  const v=[
+    new Vec3(-s,-s,-s), new Vec3(s,-s,-s),  new Vec3(s,s,-s),  new Vec3(-s,s,-s), // back
+    new Vec3(-s,-s,s),  new Vec3(s,-s,s),   new Vec3(s,s,s),   new Vec3(-s,s,s)   // front
+  ];
+  const f=[
+    [0,1,2],[0,2,3], // back
+    [4,6,5],[4,7,6], // front
+    [4,5,1],[4,1,0], // bottom
+    [7,3,2],[7,2,6], // top
+    [5,6,2],[5,2,1], // right
+    [4,0,3],[4,3,7]  // left
+  ];
+  return {verts:v, faces:f};
+}
+
+function createSphere(radius=1, seg=16){
+  const verts=[]; const faces=[];
+  for(let y=0;y<=seg;y++){
+    const v=y/seg;
+    const phi=v*Math.PI; // 0..pi
+    for(let x=0;x<=seg;x++){
+      const u=x/seg;
+      const theta=u*2*Math.PI;
+      const px=radius*Math.cos(theta)*Math.sin(phi);
+      const py=radius*Math.cos(phi);
+      const pz=radius*Math.sin(theta)*Math.sin(phi);
+      verts.push(new Vec3(px,py,pz));
+    }
+  }
+  const seg1=seg+1;
+  for(let y=0;y<seg;y++){
+    for(let x=0;x<seg;x++){
+      const a=seg1*y+x;
+      const b=a+1;
+      const c=a+seg1+1;
+      const d=a+seg1;
+      if(y!==0) faces.push([a,b,d]);
+      if(y!==seg-1) faces.push([b,c,d]);
+    }
+  }
+  return {verts, faces};
+}
+
+// ---------- Camera ---------------------------
+class Camera {
+  constructor(){
+    this.orbit={radius:8, theta:Math.PI/4, phi:Math.PI/4};
+    this.target=new Vec3(0,0,0);
+    this.fov=60*Math.PI/180;
+    this.position=new Vec3();
+    this.update();
+  }
+  update(){
+    const {radius,theta,phi}=this.orbit;
+    this.position=new Vec3(
+      radius*Math.sin(phi)*Math.cos(theta),
+      radius*Math.cos(phi),
+      radius*Math.sin(phi)*Math.sin(theta)
+    );
+    // Build camera basis
+    this.forward=this.target.sub(this.position).normalize();
+    this.right=(new Vec3(0,1,0)).cross(this.forward).normalize();
+    this.up=this.forward.cross(this.right).normalize();
+  }
+  project(v, w, h){
+    const rel=v.sub(this.position);
+    const x=rel.dot(this.right);
+    const y=rel.dot(this.up);
+    const z=rel.dot(this.forward);
+    if(z<=0) return null; // behind camera
+    const aspect=w/h;
+    const f=1/Math.tan(this.fov*0.5);
+    const ndcX=(x*f/aspect)/z;
+    const ndcY=(y*f)/z;
+    const sx=(ndcX*0.5+0.5)*w;
+    const sy=(-ndcY*0.5+0.5)*h;
+    return {x:sx,y:sy,z};
+  }
+}
+
+// ---------- Scene & Engine ------------------
+class Engine {
+  constructor(svg){
+    this.svg=svg;
+    this.camera=new Camera();
+    this.lightDir=new Vec3(1,-1,-0.5).normalize();
+    this.setGeometry(createCube());
+    this.wireframe=false;
+    this.resize();
+    window.addEventListener('resize',()=>this.resize());
+  }
+  setGeometry(geo){
+    // Precompute face normals
+    this.geometry={verts:geo.verts, faces:geo.faces.map(fi=>{
+      const n=computeNormal(geo.verts[fi[0]], geo.verts[fi[1]], geo.verts[fi[2]]);
+      return {idx:fi, normal:n};
+    })};
+  }
+  render(){
+    const {width,height}=this.svg.getBoundingClientRect();
+    this.svg.innerHTML='';
+    const facesToDraw=[];
+    const {verts,faces}=this.geometry;
+    for(const f of faces){
+      const proj=[];
+      let depth=0;
+      for(const i of f.idx){
+        const p=this.camera.project(verts[i],width,height);
+        if(!p){ proj.length=0; break; }
+        proj.push(p);
+        depth+=p.z;
+      }
+      if(proj.length===0) continue; // face behind camera or clipped
+      depth/=3;
+      const shade=Math.max(0, f.normal.dot(this.lightDir));
+      facesToDraw.push({proj,depth,shade});
+    }
+    facesToDraw.sort((a,b)=>b.depth-a.depth); // painter's algorithm
+    for(const f of facesToDraw){
+      const pts=f.proj.map(p=>`${p.x},${p.y}`).join(' ');
+      const c=Math.floor(200*f.shade+30);
+      const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+      poly.setAttribute('points',pts);
+      if(this.wireframe){
+        poly.setAttribute('fill','none');
+        poly.setAttribute('stroke',`rgb(${c},${c},${c})`);
+        poly.setAttribute('stroke-width','1');
+      }else{
+        poly.setAttribute('fill',`rgb(${c},${c},${c})`);
+        poly.setAttribute('stroke','#0008');
+        poly.setAttribute('stroke-width','0.5');
+      }
+      this.svg.appendChild(poly);
+    }
+  }
+  resize(){
+    // Force re-render when viewport changes
+    this.svg.setAttribute('width',window.innerWidth);
+    this.svg.setAttribute('height',window.innerHeight);
+  }
+}
+
+function computeNormal(a,b,c){
+  return b.sub(a).cross(c.sub(a)).normalize();
+}
+
+// ---------- Main Setup ----------------------
+window.addEventListener('DOMContentLoaded',()=>{
+  const svg=document.getElementById('svg3d');
+  const wireChk=document.getElementById('wireframe');
+  const zoomSlider=document.getElementById('zoom');
+  const segSlider=document.getElementById('segments');
+  const zoomVal=document.getElementById('zoomVal');
+  const segVal=document.getElementById('segVal');
+  const camDebug=document.getElementById('camDebug');
+
+  const engine=new Engine(svg);
+  window.engine=engine; // for debug access
+
+  // ---- Controls ----
+  wireChk.addEventListener('change',()=>{engine.wireframe=wireChk.checked;});
+  zoomSlider.addEventListener('input',()=>{
+    engine.camera.orbit.radius=parseFloat(zoomSlider.value)/100;
+    zoomVal.textContent=zoomSlider.value;
+  });
+  segSlider.addEventListener('input',()=>{
+    segVal.textContent=segSlider.value;
+    engine.setGeometry(createSphere(1,parseInt(segSlider.value)));
+  });
+
+  // ---- Mouse interaction ----
+  let dragging=false; let lastX=0; let lastY=0;
+  svg.addEventListener('mousedown',e=>{dragging=true; lastX=e.clientX; lastY=e.clientY;});
+  window.addEventListener('mouseup',()=>dragging=false);
+  window.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const dx=e.clientX-lastX; const dy=e.clientY-lastY;
+    lastX=e.clientX; lastY=e.clientY;
+    const cam=engine.camera;
+    cam.orbit.theta-=dx*0.005;
+    cam.orbit.phi=Math.min(Math.max(0.01,cam.orbit.phi+dy*0.005),Math.PI-0.01);
+  });
+  svg.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const delta=e.deltaY>0?1:-1;
+    engine.camera.orbit.radius=Math.max(0.5,engine.camera.orbit.radius+delta*0.3);
+    zoomSlider.value=(engine.camera.orbit.radius*100).toFixed(0);
+    zoomVal.textContent=zoomSlider.value;
+  },{passive:false});
+
+  function update(){
+    engine.camera.update();
+    engine.render();
+    camDebug.innerHTML=`<b>Camera</b><br>
+     Pos: (${engine.camera.position.x.toFixed(2)}, ${engine.camera.position.y.toFixed(2)}, ${engine.camera.position.z.toFixed(2)})<br>
+     Orbit: r=${engine.camera.orbit.radius.toFixed(2)}, θ=${(engine.camera.orbit.theta*180/Math.PI).toFixed(1)}°, φ=${(engine.camera.orbit.phi*180/Math.PI).toFixed(1)}°`;
+    requestAnimationFrame(update);
+  }
+  update();
+});
+</script>
+</body>
+</html>
