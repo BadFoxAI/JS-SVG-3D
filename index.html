@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -20,6 +21,8 @@
     #controls input[type="range"]{ width:100%; }
     #camDebug{ margin-top:8px; background:#222a; padding:4px; border-radius:4px; color:#9cf; }
     #bottombar{ height:22px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:12px; }
+    #objectList{ width:100%; }
+    #transformControls{ margin-top:8px; }
   </style>
 </head>
 <body>
@@ -29,8 +32,6 @@
   <div id="main">
     <div id="toolbar">
       <button title="Select">S</button>
-      <button title="Move">M</button>
-      <button title="Scale">SC</button>
     </div>
     <div id="viewport">
       <svg id="svg3d"></svg>
@@ -43,6 +44,15 @@
         <span id="zoomVal" style="display:block;">800</span>
         <label>Sphere Segments <input type="range" id="segments" min="6" max="48" value="16"></label>
         <span id="segVal" style="display:block;">16</span>
+        <label>Object <select id="objectList"></select></label>
+        <button id="addCube">Add Cube</button>
+        <button id="addSphere">Add Sphere</button>
+        <div id="transformControls">
+          <label>X <input type="number" id="posX" step="0.1"></label>
+          <label>Y <input type="number" id="posY" step="0.1"></label>
+          <label>Z <input type="number" id="posZ" step="0.1"></label>
+          <label>Scale <input type="number" id="scaleAll" step="0.1" value="1"></label>
+        </div>
       </div>
       <div id="camDebug"></div>
     </div>
@@ -116,6 +126,29 @@ function createSphere(radius=1, seg=16){
   return {verts, faces};
 }
 
+// ---------- Scene Object & Transform --------
+class SceneObject {
+  constructor(geometry,name){
+    this.geometry=geometry;
+    this.name=name||'Obj';
+    this.position=new Vec3();
+    this.rotation=new Vec3(); // not yet exposed in UI
+    this.scale=new Vec3(1,1,1);
+  }
+}
+
+function transformVertex(v,obj){
+  // scale
+  let x=v.x*obj.scale.x, y=v.y*obj.scale.y, z=v.z*obj.scale.z;
+  // rotation (Euler X->Y->Z)
+  const rx=obj.rotation.x, ry=obj.rotation.y, rz=obj.rotation.z;
+  if(rx!==0){ const c=Math.cos(rx),s=Math.sin(rx); const y1=y*c - z*s; const z1=y*s + z*c; y=y1; z=z1; }
+  if(ry!==0){ const c=Math.cos(ry),s=Math.sin(ry); const x1=x*c + z*s; const z1=-x*s + z*c; x=x1; z=z1; }
+  if(rz!==0){ const c=Math.cos(rz),s=Math.sin(rz); const x1=x*c - y*s; const y1=x*s + y*c; x=x1; y=y1; }
+  // translate
+  return new Vec3(x+obj.position.x, y+obj.position.y, z+obj.position.z);
+}
+
 // ---------- Camera ---------------------------
 class Camera {
   constructor(){
@@ -159,57 +192,58 @@ class Engine {
     this.svg=svg;
     this.camera=new Camera();
     this.lightDir=new Vec3(1,-1,-0.5).normalize();
-    this.setGeometry(createCube());
+    this.objects=[];
+    this.selected=null;
     this.wireframe=false;
+    this.addObject(createCube(), 'Cube');
     this.resize();
     window.addEventListener('resize',()=>this.resize());
   }
-  setGeometry(geo){
-    // Precompute face normals
-    this.geometry={verts:geo.verts, faces:geo.faces.map(fi=>{
-      const n=computeNormal(geo.verts[fi[0]], geo.verts[fi[1]], geo.verts[fi[2]]);
-      return {idx:fi, normal:n};
-    })};
+  addObject(geo,name){
+    const obj=new SceneObject(geo,name);
+    this.objects.push(obj);
+    if(!this.selected) this.selected=obj;
+    return obj;
   }
   render(){
     const {width,height}=this.svg.getBoundingClientRect();
     this.svg.innerHTML='';
     const facesToDraw=[];
-    const {verts,faces}=this.geometry;
-    for(const f of faces){
-      const proj=[];
-      let depth=0;
-      for(const i of f.idx){
-        const p=this.camera.project(verts[i],width,height);
-        if(!p){ proj.length=0; break; }
-        proj.push(p);
-        depth+=p.z;
+    for(const obj of this.objects){
+      const {verts,faces}=obj.geometry;
+      for(const f of faces){
+        const tv0=transformVertex(verts[f[0]],obj);
+        const tv1=transformVertex(verts[f[1]],obj);
+        const tv2=transformVertex(verts[f[2]],obj);
+        const proj0=this.camera.project(tv0,width,height);
+        const proj1=this.camera.project(tv1,width,height);
+        const proj2=this.camera.project(tv2,width,height);
+        if(!proj0||!proj1||!proj2) continue;
+        const normal=computeNormal(tv0,tv1,tv2);
+        const shade=Math.max(0,normal.dot(this.lightDir));
+        const depth=(proj0.z+proj1.z+proj2.z)/3;
+        facesToDraw.push({pts:[proj0,proj1,proj2],depth,shade,sel:obj===this.selected});
       }
-      if(proj.length===0) continue; // face behind camera or clipped
-      depth/=3;
-      const shade=Math.max(0, f.normal.dot(this.lightDir));
-      facesToDraw.push({proj,depth,shade});
     }
-    facesToDraw.sort((a,b)=>b.depth-a.depth); // painter's algorithm
+    facesToDraw.sort((a,b)=>b.depth-a.depth);
     for(const f of facesToDraw){
-      const pts=f.proj.map(p=>`${p.x},${p.y}`).join(' ');
+      const pts=f.pts.map(p=>`${p.x},${p.y}`).join(' ');
       const c=Math.floor(200*f.shade+30);
       const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
       poly.setAttribute('points',pts);
       if(this.wireframe){
         poly.setAttribute('fill','none');
-        poly.setAttribute('stroke',`rgb(${c},${c},${c})`);
-        poly.setAttribute('stroke-width','1');
+        poly.setAttribute('stroke',f.sel?'#f00':`rgb(${c},${c},${c})`);
+        poly.setAttribute('stroke-width',f.sel?'2':'1');
       }else{
         poly.setAttribute('fill',`rgb(${c},${c},${c})`);
-        poly.setAttribute('stroke','#0008');
-        poly.setAttribute('stroke-width','0.5');
+        poly.setAttribute('stroke',f.sel?'#f00':'#0008');
+        poly.setAttribute('stroke-width',f.sel?'1':'0.5');
       }
       this.svg.appendChild(poly);
     }
   }
   resize(){
-    // Force re-render when viewport changes
     this.svg.setAttribute('width',window.innerWidth);
     this.svg.setAttribute('height',window.innerHeight);
   }
@@ -229,10 +263,60 @@ window.addEventListener('DOMContentLoaded',()=>{
   const segVal=document.getElementById('segVal');
   const camDebug=document.getElementById('camDebug');
 
-  const engine=new Engine(svg);
-  window.engine=engine; // for debug access
+  const objList=document.getElementById('objectList');
+  const addCubeBtn=document.getElementById('addCube');
+  const addSphereBtn=document.getElementById('addSphere');
+  const posX=document.getElementById('posX');
+  const posY=document.getElementById('posY');
+  const posZ=document.getElementById('posZ');
+  const scaleAll=document.getElementById('scaleAll');
 
-  // ---- Controls ----
+  const engine=new Engine(svg);
+  window.engine=engine;
+
+  function refreshObjectList(){
+    objList.innerHTML='';
+    engine.objects.forEach((o,i)=>{
+      const opt=document.createElement('option');
+      opt.textContent=o.name+" "+(i+1);
+      opt.value=i;
+      objList.appendChild(opt);
+    });
+    objList.selectedIndex=engine.objects.indexOf(engine.selected);
+  }
+  function updateTransformInputs(){
+    if(!engine.selected) return;
+    posX.value=engine.selected.position.x.toFixed(2);
+    posY.value=engine.selected.position.y.toFixed(2);
+    posZ.value=engine.selected.position.z.toFixed(2);
+    scaleAll.value=engine.selected.scale.x.toFixed(2);
+  }
+  refreshObjectList();
+  updateTransformInputs();
+
+  objList.addEventListener('change',()=>{
+    engine.selected=engine.objects[objList.selectedIndex];
+    updateTransformInputs();
+  });
+
+  addCubeBtn.onclick=()=>{
+    const obj=engine.addObject(createCube(), 'Cube');
+    engine.selected=obj;
+    refreshObjectList();
+    updateTransformInputs();
+  };
+  addSphereBtn.onclick=()=>{
+    const obj=engine.addObject(createSphere(1,parseInt(segSlider.value)), 'Sphere');
+    engine.selected=obj;
+    refreshObjectList();
+    updateTransformInputs();
+  };
+
+  posX.addEventListener('input',()=>{ if(engine.selected){ engine.selected.position.x=parseFloat(posX.value)||0; }});
+  posY.addEventListener('input',()=>{ if(engine.selected){ engine.selected.position.y=parseFloat(posY.value)||0; }});
+  posZ.addEventListener('input',()=>{ if(engine.selected){ engine.selected.position.z=parseFloat(posZ.value)||0; }});
+  scaleAll.addEventListener('input',()=>{ if(engine.selected){ const v=parseFloat(scaleAll.value)||1; engine.selected.scale=new Vec3(v,v,v);} });
+
   wireChk.addEventListener('change',()=>{engine.wireframe=wireChk.checked;});
   zoomSlider.addEventListener('input',()=>{
     engine.camera.orbit.radius=parseFloat(zoomSlider.value)/100;
@@ -240,10 +324,9 @@ window.addEventListener('DOMContentLoaded',()=>{
   });
   segSlider.addEventListener('input',()=>{
     segVal.textContent=segSlider.value;
-    engine.setGeometry(createSphere(1,parseInt(segSlider.value)));
+    if(engine.selected) engine.selected.geometry=createSphere(1,parseInt(segSlider.value));
   });
 
-  // ---- Mouse interaction ----
   let dragging=false; let lastX=0; let lastY=0;
   svg.addEventListener('mousedown',e=>{dragging=true; lastX=e.clientX; lastY=e.clientY;});
   window.addEventListener('mouseup',()=>dragging=false);
