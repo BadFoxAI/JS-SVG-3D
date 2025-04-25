@@ -2,7 +2,9 @@
 
 A minimalist 3D engine built with **vanilla JavaScript** and **SVG**, entirely contained in a single `index.html` file. No WebGL, no libraries—just math, SVGs, and fun.
 
-![screenshot](https://raw.githubusercontent.com/BadFoxAI/VanillaJS3D/main/screenshot.png) <!-- Add screenshot.png to the repo for this to work -->
+![screenshot](https://raw.githubusercontent.com/BadFoxAI/VanillaJS3D/main/screenshot.png)
+
+[Try Here at: https://vanillajs3d.netlify.app/](https://vanillajs3d.netlify.app/)
 
 ## ✨ Features
 
