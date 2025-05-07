@@ -1,4 +1,4 @@
-# 🧊 VanillaJS3D
+# 🧊 JS-SVG-3D
 
 A minimalist 3D engine built with **vanilla JavaScript** and **SVG**, entirely contained in a single `index.html` file. No WebGL, no libraries—just math, SVGs, and fun.
 
