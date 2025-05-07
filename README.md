@@ -1,10 +1,10 @@
 # 🧊 JS-SVG-3D
 
-A minimalist 3D engine built with **vanilla JavaScript** and **SVG**, entirely contained in a single `index.html` file. No WebGL, no libraries—just math, SVGs, and fun.
+A minimalist 3D engine built with **JavaScript** and **SVG**, entirely contained in a single `index.html` file. No WebGL, no libraries—just math, SVGs, and fun.
 
-![screenshot](https://raw.githubusercontent.com/BadFoxAI/VanillaJS3D/main/screenshot.png)
+![screenshot](https://raw.githubusercontent.com/BadFoxAI/js-svg-3d/main/screenshot.png)
 
-Try Here at: [https://vanillajs3d.netlify.app/](https://vanillajs3d.netlify.app/)
+Try Here at: [https://js-svg-3d.netlify.app/](https://js-svg-3d.netlify.app/)
 
 ## ✨ Features
 
