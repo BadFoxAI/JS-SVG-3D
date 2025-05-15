@@ -3,9 +3,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Vanilla JS SVG 3D Engine (v8 - Viewport Selection)</title>
+  <title>JS-SVG-3D Engine</title>
   <style>
-    /* ... Same CSS as v7 ... */
     html,body { margin:0; padding:0; overflow:hidden; height:100vh; font-family:Arial, sans-serif; color:#eee; background:#222; }
     body{ display:flex; flex-direction:column; }
     #topbar{ height:26px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:14px; user-select:none; }
@@ -32,11 +31,11 @@
   </style>
 </head>
 <body>
-  <!-- ... Same HTML structure as v7 ... -->
-  <div id="topbar">
+    <div id="topbar">
     <span class="menu" title="File operations (not implemented)">File</span>
     <span class="menu" title="Edit operations (not implemented)">Edit</span>
     <span class="menu" title="Add new objects">Add</span>
+    <span class="menu" id="deleteSelectedMenu" title="Delete selected object (Del/Backspace)">Delete</span>
   </div>
   <div id="main">
     <div id="toolbar">
@@ -46,7 +45,7 @@
     <div id="sidebar">
       <div class="panel">
         <div class="panel-header" data-target="sceneSetupContent">▼ Scene Setup</div>
-        <div class.panel-content" id="sceneSetupContent">
+        <div class="panel-content" id="sceneSetupContent">
           <label title="Choose the camera to view the scene through">Active Viewport Cam: <select id="activeCameraList"></select></label>
           <label title="Select an object in the scene">Object <select id="objectList"></select></label>
           <button id="addCube" title="Add a new Cube primitive to the scene">Add Cube</button>
@@ -87,112 +86,137 @@
       </div>
     </div>
   </div>
-  <div id="bottombar">Loading...</div>
+  <div id="bottombar">Loading... (Press 'F' or Numpad '.' to frame selected. 'Del' or 'Backspace' to delete.)</div>
 
 <script>
 const DEG_TO_RAD = Math.PI/180;
 const RAD_TO_DEG = 180/Math.PI;
 
-class Vec3 { /* ... Same as v7 ... */
+class Vec3 { 
   constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z}add(v){return new Vec3(this.x+v.x,this.y+v.y,this.z+v.z)}sub(v){return new Vec3(this.x-v.x,this.y-v.y,this.z-v.z)}mul(s){return new Vec3(this.x*s,this.y*s,this.z*s)}dot(v){return this.x*v.x+this.y*v.y+this.z*v.z}cross(v){return new Vec3(this.y*v.z-this.z*v.y,this.z*v.x-this.x*v.z,this.x*v.y-this.y*v.x)}length(){const l=this.x*this.x+this.y*this.y+this.z*this.z;return l>1e-9?Math.sqrt(l):0}normalize(){const len=this.length();return len>1e-9?this.mul(1/len):new Vec3}clone(){return new Vec3(this.x,this.y,this.z)}set(v){this.x=v.x;this.y=v.y;this.z=v.z;return this}static computeNormal(v0,v1,v2){return v1.sub(v0).cross(v2.sub(v0)).normalize()}
 }
-class Transform { /* ... Same as v7 ... */
+class Transform { 
     constructor(){this.position=new Vec3;this.rotation=new Vec3;this.scale=new Vec3(1,1,1)}
     applyToVertex(vertex){let x=vertex.x*this.scale.x,y=vertex.y*this.scale.y,z=vertex.z*this.scale.z;const rx=this.rotation.x,ry=this.rotation.y,rz=this.rotation.z;if(rx!==0){const c=Math.cos(rx),s=Math.sin(rx);const y1=y*c-z*s,z1=y*s+z*c;y=y1;z=z1}if(ry!==0){const c=Math.cos(ry),s=Math.sin(ry);const x1=x*c+z*s,z1=-x*s+z*c;x=x1;z=z1}if(rz!==0){const c=Math.cos(rz),s=Math.sin(rz);const x1=x*c-y*s,y1=x*s+y*c;x=x1;y=y1}return new Vec3(x+this.position.x,y+this.position.y,z+this.position.z)}
 }
-class CameraData { /* ... Same as v7 ... */
+class CameraData { 
     constructor(fovDeg=60,near=0.1,far=1000){this.fov=fovDeg*DEG_TO_RAD;this.nearClip=near;this.farClip=far;this.orbitTarget=new Vec3;}
 }
-class Mesh { /* ... Same as v7 ... */
+class Mesh { 
     constructor(n="Mesh",v=[],f=[]){this.name=n;this.verts=v;this.faces=f}static createCube(s=1){const h=s*0.5;const v=[new Vec3(-h,-h,-h),new Vec3(h,-h,-h),new Vec3(h,h,-h),new Vec3(-h,h,-h),new Vec3(-h,-h,h),new Vec3(h,-h,h),new Vec3(h,h,h),new Vec3(-h,h,h)];const f=[[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[3,7,6],[3,6,2],[0,4,7],[0,7,3],[1,2,6],[1,6,5]];return new Mesh("CubeGeom",v,f)}static createSphere(r=1,seg=16){const v=[];const fc=[];seg=Math.max(3,seg);const rings=Math.max(2,Math.floor(seg/2)+1);v.push(new Vec3(0,r,0));for(let i=1;i<rings;i++){const phi=(i/rings)*Math.PI;for(let j=0;j<seg;j++){const theta=(j/seg)*2*Math.PI;v.push(new Vec3(r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta)));}}v.push(new Vec3(0,-r,0));const tPI=0,bPI=v.length-1;for(let j=0;j<seg;j++){fc.push([tPI,1+((j+1)%seg),1+j]);}for(let i=0;i<rings-2;i++){const r1SI=1+i*seg,r2SI=1+(i+1)*seg;for(let j=0;j<seg;j++){const v1=r1SI+j,v2=r1SI+((j+1)%seg),v3=r2SI+j,v4=r2SI+((j+1)%seg);fc.push([v1,v2,v4]);fc.push([v1,v4,v3]);}}const lrSI=1+(rings-2)*seg;for(let j=0;j<seg;j++){fc.push([bPI,lrSI+j,lrSI+((j+1)%seg)]);}return new Mesh(`SphereGeom.${seg}x${rings}`,v,fc)}static createCameraGizmo(s=0.5){const v=[new Vec3(0,0,0),new Vec3(-s,-s*.75,s*1.5),new Vec3(s,-s*.75,s*1.5),new Vec3(s,s*.75,s*1.5),new Vec3(-s,s*.75,s*1.5),new Vec3(0,s*1.1,s*1.2)];const f=[[0,1,2],[0,2,3],[0,3,4],[0,4,1],[1,4,3],[1,3,2],[3,4,5]];return new Mesh("CameraGizmo",v,f)}
 }
-class Object3D { /* ... Same as v7 ... */
+class Object3D { 
     constructor(name="Object"){this.id=Object3D.nextId++;this.name=name;this.transform=new Transform();this.meshData=null;this.cameraData=null;this.gizmoMesh=null;this.parent=null;this.children=[];this.visible=true;}
     static nextId=0;
     getWorldTransform(){return this.transform;} 
     getCameraBasisVectors(){if(!this.cameraData)return null;const worldPos=this.getWorldTransform().position,target=this.cameraData.orbitTarget;let forward=target.sub(worldPos).normalize();if(forward.length()<1e-6){const rZ=this.transform.rotation.z,rY=this.transform.rotation.y;forward=new Vec3(Math.sin(rY)*Math.cos(rZ),-Math.sin(rZ),Math.cos(rY)*Math.cos(rZ)).normalize();if(forward.length()<1e-6)forward=new Vec3(0,0,-1)}let worldUp=new Vec3(0,1,0),right=worldUp.cross(forward).normalize();if(right.length()<1e-6){const camRotZ=this.transform.rotation.z;right=new Vec3(Math.cos(camRotZ),Math.sin(camRotZ),0).normalize();if(Math.abs(forward.y)>.999||right.length()<1e-6)right=new Vec3(1,0,0)}let up=forward.cross(right).normalize();return{position:worldPos,forward,right,up};}
+    getApproximateWorldBounds(){if(!this.meshData||this.meshData.verts.length===0){const pos=this.getWorldTransform().position;return{min:pos.clone(),max:pos.clone(),center:pos.clone(),size:new Vec3};}const objTransform=this.getWorldTransform();let min=new Vec3(Infinity,Infinity,Infinity),max=new Vec3(-Infinity,-Infinity,-Infinity);for(const localVert of this.meshData.verts){const worldVert=objTransform.applyToVertex(localVert);min.x=Math.min(min.x,worldVert.x);min.y=Math.min(min.y,worldVert.y);min.z=Math.min(min.z,worldVert.z);max.x=Math.max(max.x,worldVert.x);max.y=Math.max(max.y,worldVert.y);max.z=Math.max(max.z,worldVert.z);}const center=min.add(max).mul(0.5),size=max.sub(min);return{min,max,center,size};}
 }
-class Scene { /* ... Same as v7 ... */
-    constructor(){this.objects=[];this.activeCameraObject=null;this.lightDirection=new Vec3(.5,.8,.3).normalize();}addObject(o){this.objects.push(o);}removeObject(o){this.objects=this.objects.filter(obj=>obj!==o);if(o.parent)o.parent.children=o.parent.children.filter(c=>c!==o);o.children.forEach(c=>c.parent=null);o.parent=null;}getObjectById(id){return this.objects.find(o=>o.id===id);}setActiveCamera(cO){if(cO&&cO.cameraData){this.activeCameraObject=cO;console.log(`Active cam: ${cO.name}`)}else console.warn("Invalid active cam");}getCameras(){return this.objects.filter(o=>o.cameraData);}
+class Scene { 
+    constructor(){this.objects=[];this.activeCameraObject=null;this.lightDirection=new Vec3(.5,.8,.3).normalize();}addObject(o){this.objects.push(o);}
+    removeObject(objectToRemove){this.objects=this.objects.filter(obj=>obj.id!==objectToRemove.id);if(objectToRemove.parent){objectToRemove.parent.children=objectToRemove.parent.children.filter(child=>child.id!==objectToRemove.id)}objectToRemove.children.forEach(child=>child.parent=null);objectToRemove.parent=null;}
+    getObjectById(id){return this.objects.find(o=>o.id===id);}setActiveCamera(cO){if(cO&&cO.cameraData){this.activeCameraObject=cO;console.log(`Active cam: ${cO.name}`)}else console.warn("Invalid active cam");}getCameras(){return this.objects.filter(o=>o.cameraData);}
+}
+function isPointInPolygon(point, polygonVertices) { 
+    let x=point.x,y=point.y,inside=!1;for(let i=0,j=polygonVertices.length-1;i<polygonVertices.length;j=i++){let xi=polygonVertices[i].x,yi=polygonVertices[i].y,xj=polygonVertices[j].x,yj=polygonVertices[j].y,intersect=((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi);if(intersect)inside=!inside}return inside;
+}
+class SVGRenderer { 
+    constructor(svg){this.svgElement=svg;this.wireframe=false;this.selectedObjectId=null;this.renderableFaces=[]}project(wVert,camBasis,camFOV,vpW,vpH,nearClip){const rel=wVert.sub(camBasis.position);const x=rel.dot(camBasis.right),y=rel.dot(camBasis.up),z=rel.dot(camBasis.forward);if(z<=nearClip)return null;const aspect=vpW/vpH,f=1/Math.tan(camFOV*.5);const nX=(x*f/aspect)/z,nY=(y*f)/z;return{x:(nX*.5+.5)*vpW,y:(-nY*.5+.5)*vpH,depth:z}}
+    render(scene,vpCam){if(!scene||!vpCam||!vpCam.cameraData){this.svgElement.innerHTML='<text x="10" y="20" fill="red">No active camera.</text>';return}const{width:w,height:h}=this.svgElement.getBoundingClientRect();if(w===0||h===0)return;this.svgElement.innerHTML='';const facesToDraw=[];this.renderableFaces=[];const camBasis=vpCam.getCameraBasisVectors();if(!camBasis){this.svgElement.innerHTML='<text x="10" y="20" fill="red">Invalid cam basis.</text>';return}const camFOV=vpCam.cameraData.fov,camNearClip=vpCam.cameraData.nearClip;for(const obj of scene.objects){if(!obj.visible)continue;const objTrans=obj.getWorldTransform();let meshR=obj.meshData,isGiz=false;if(obj.cameraData&&obj!==vpCam&&obj.gizmoMesh){meshR=obj.gizmoMesh;isGiz=true}if(!meshR)continue;const wVerts=meshR.verts.map(vL=>objTrans.applyToVertex(vL));for(const fIdx of meshR.faces){if(fIdx.length<3)continue;const vW=fIdx.map(i=>wVerts[i]),pS=vW.map(vrt=>this.project(vrt,camBasis,camFOV,w,h,camNearClip));if(pS.some(pt=>!pt))continue;const normW=Vec3.computeNormal(vW[0],vW[1],vW[2]),vDir=camBasis.position.sub(vW[0]);if(normW.dot(vDir)<=1e-6&&!this.wireframe&&!isGiz)continue;const NdotL=Math.max(0,normW.dot(scene.lightDirection)),shade=isGiz?1.0:(.2+.8*NdotL),depth=(pS[0].depth+pS[1].depth+pS[2].depth)/3;const faceData={objRef:obj,pts:pS,depth,shade,sel:(obj.id===this.selectedObjectId&&!isGiz),isGiz};facesToDraw.push(faceData);if(!isGiz){this.renderableFaces.push({object:obj,screenPoints:pS.map(p=>({x:p.x,y:p.y})),depth:depth})}}}facesToDraw.sort((a,b)=>b.depth-a.depth);this.renderableFaces.sort((a,b)=>a.depth-b.depth);for(const f of facesToDraw){const pStr=f.pts.map(p=>`${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(' '),c=Math.floor(Math.min(255,Math.max(0,255*f.shade))),poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');poly.setAttribute('points',pStr);const strC=f.sel?'#ff5555':(f.isGiz?'#aaaaff':'#0003'),fillC=f.isGiz?'none':`rgb(${c},${c},${c})`,strW=f.sel?'1.5':(f.isGiz?'1':'0.2');if(this.wireframe||f.isGiz){poly.setAttribute('fill',f.isGiz&&!this.wireframe?'#7777AA55':'none');poly.setAttribute('stroke',strC);poly.setAttribute('stroke-width',strW)}else{poly.setAttribute('fill',fillC);poly.setAttribute('stroke',strC);poly.setAttribute('stroke-width',strW)}this.svgElement.appendChild(poly)}}
 }
 
-// Utility for point-in-polygon test
-function isPointInPolygon(point, polygonVertices) {
-    // Ray casting algorithm
-    let x = point.x, y = point.y;
-    let inside = false;
-    for (let i = 0, j = polygonVertices.length - 1; i < polygonVertices.length; j = i++) {
-        let xi = polygonVertices[i].x, yi = polygonVertices[i].y;
-        let xj = polygonVertices[j].x, yj = polygonVertices[j].y;
-        let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
+class ViewportInputHandler {
+    constructor(viewport, appRef) {
+        this.viewportElement = viewport;
+        this.app = appRef;
+        this.isOrbiting = false;
+        this.isPanning = false;
+        this.didDrag = false; // NEW: To distinguish click from drag
+        this.dragThreshold = 5; // Pixels
+        this.mouseDownPos = { x: 0, y: 0 }; // Store position at mousedown
+        this.lastMousePos = { x: 0, y: 0 };
+        this.orbitTarget = new Vec3(0,0,0); 
+        this.orbitRadius = 8;              
+        this.panSpeed = 0.0025;            
+
+        this.viewportElement.addEventListener('contextmenu', e => e.preventDefault());
+        this.viewportElement.addEventListener('mousedown', this.onMouseDown.bind(this));
+        window.addEventListener('mouseup', this.onMouseUp.bind(this)); 
+        window.addEventListener('mousemove', this.onMouseMove.bind(this)); 
+        this.viewportElement.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
     }
-    return inside;
-}
 
-class SVGRenderer {
-    constructor(svg){this.svgElement=svg;this.wireframe=false;this.selectedObjectId=null; this.renderableFaces = []; /* NEW: For picking */}
-    project(wVert,camBasis,camFOV,vpW,vpH,nearClip){const rel=wVert.sub(camBasis.position);const x=rel.dot(camBasis.right),y=rel.dot(camBasis.up),z=rel.dot(camBasis.forward);if(z<=nearClip)return null;const aspect=vpW/vpH,f=1/Math.tan(camFOV*.5);const nX=(x*f/aspect)/z,nY=(y*f)/z;return{x:(nX*.5+.5)*vpW,y:(-nY*.5+.5)*vpH,depth:z};}
-    render(scene,vpCam){
-        if(!scene||!vpCam||!vpCam.cameraData){this.svgElement.innerHTML='<text x="10" y="20" fill="red">No active camera.</text>';return}
-        const{width:w,height:h}=this.svgElement.getBoundingClientRect();if(w===0||h===0)return;
-        this.svgElement.innerHTML='';
-        const facesToDraw=[];
-        this.renderableFaces = []; // NEW: Clear for new frame
+    syncOrbitParametersFromActiveCamera(){ 
+        const activeCamObj=this.app.scene.activeCameraObject;if(activeCamObj&&activeCamObj.cameraData){this.orbitTarget.set(activeCamObj.cameraData.orbitTarget);const directionToTarget=this.orbitTarget.sub(activeCamObj.transform.position);this.orbitRadius=directionToTarget.length();if(this.orbitRadius<0.1){this.orbitRadius=0.1;const camBasis=activeCamObj.getCameraBasisVectors();if(camBasis&&camBasis.forward.length()>0.5){activeCamObj.transform.position=this.orbitTarget.sub(camBasis.forward.mul(this.orbitRadius))}else{activeCamObj.transform.position=this.orbitTarget.sub(new Vec3(0,0,-1).mul(this.orbitRadius))}}}else{this.orbitTarget=new Vec3(0,0,0);this.orbitRadius=8;}
+    }
 
-        const camBasis=vpCam.getCameraBasisVectors();
-        if(!camBasis){this.svgElement.innerHTML='<text x="10" y="20" fill="red">Invalid cam basis.</text>';return;}
-        const camFOV=vpCam.cameraData.fov,camNearClip=vpCam.cameraData.nearClip;
+    onMouseDown(event) {
+        event.preventDefault();
+        const activeCamObj = this.app.scene.activeCameraObject;
+        if (!activeCamObj) return;
 
-        for(const obj of scene.objects){
-            if(!obj.visible)continue;
-            const objTrans=obj.getWorldTransform(); 
-            let meshR=obj.meshData,isGiz=false;
-            if(obj.cameraData&&obj!==vpCam&&obj.gizmoMesh){meshR=obj.gizmoMesh;isGiz=true;}
-            if(!meshR)continue;
-            const wVerts=meshR.verts.map(vL=>objTrans.applyToVertex(vL)); 
-            for(const fIdx of meshR.faces){
-                if(fIdx.length<3)continue;
-                const vW=fIdx.map(i=>wVerts[i]),pS=vW.map(vrt=>this.project(vrt,camBasis,camFOV,w,h,camNearClip));
-                if(pS.some(pt=>!pt))continue; // Some points are behind camera or clipped
+        this.syncOrbitParametersFromActiveCamera(); 
+        this.mouseDownPos = { x: event.clientX, y: event.clientY }; // Store mousedown pos
+        this.lastMousePos = { x: event.clientX, y: event.clientY };
+        this.didDrag = false; // Reset didDrag flag
 
-                const normW=Vec3.computeNormal(vW[0],vW[1],vW[2]),vDir=camBasis.position.sub(vW[0]);
-                if(normW.dot(vDir)<=1e-6&&!this.wireframe&&!isGiz)continue; // Backface culling
-                
-                const NdotL=Math.max(0,normW.dot(scene.lightDirection)),shade=isGiz?1.0:(.2+.8*NdotL),depth=(pS[0].depth+pS[1].depth+pS[2].depth)/3;
-                
-                const faceData = {objRef: obj, pts:pS, depth, shade, sel:(obj.id===this.selectedObjectId&&!isGiz), isGiz};
-                facesToDraw.push(faceData);
-                if (!isGiz) { // NEW: Only store non-gizmo faces for picking for now
-                    this.renderableFaces.push({
-                        object: obj,
-                        screenPoints: pS.map(p => ({x: p.x, y: p.y})), // Store only x,y for 2D point-in-poly
-                        depth: depth
-                    });
-                }
-            }
-        }
-        facesToDraw.sort((a,b)=>b.depth-a.depth); // Painter's algorithm
-        this.renderableFaces.sort((a,b) => a.depth - b.depth); // Sort for picking (closest first)
-
-        for(const f of facesToDraw){ /* ... SVG polygon drawing same as v7 ... */
-            const pStr=f.pts.map(p=>`${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(' '),c=Math.floor(Math.min(255,Math.max(0,255*f.shade))),poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');poly.setAttribute('points',pStr);const strC=f.sel?'#ff5555':(f.isGiz?'#aaaaff':'#0003'),fillC=f.isGiz?'none':`rgb(${c},${c},${c})`,strW=f.sel?'1.5':(f.isGiz?'1':'0.2');if(this.wireframe||f.isGiz){poly.setAttribute('fill',f.isGiz&&!this.wireframe?'#7777AA55':'none');poly.setAttribute('stroke',strC);poly.setAttribute('stroke-width',strW)}else{poly.setAttribute('fill',fillC);poly.setAttribute('stroke',strC);poly.setAttribute('stroke-width',strW)}this.svgElement.appendChild(poly);
+        if (event.button === 0 && !event.shiftKey) { 
+            this.isOrbiting = true;
+            this.isPanning = false;
+            this.viewportElement.style.cursor = 'grabbing';
+        } else if (event.button === 1 || (event.button === 0 && event.shiftKey)) { 
+            this.isPanning = true;
+            this.isOrbiting = false;
+            this.viewportElement.style.cursor = 'move';
         }
     }
-}
 
-class ViewportInputHandler { /* ... Same as v7 ... */
-    constructor(viewport,appRef){this.viewportElement=viewport;this.app=appRef;this.isOrbiting=false;this.isPanning=false;this.lastMousePos={x:0,y:0};this.orbitTarget=new Vec3;this.orbitRadius=8;this.panSpeed=0.0025;this.viewportElement.addEventListener('contextmenu',e=>e.preventDefault());this.viewportElement.addEventListener('mousedown',this.onMouseDown.bind(this));window.addEventListener('mouseup',this.onMouseUp.bind(this));window.addEventListener('mousemove',this.onMouseMove.bind(this));this.viewportElement.addEventListener('wheel',this.onWheel.bind(this),{passive:false});}
-    syncOrbitParametersFromActiveCamera(){const activeCamObj=this.app.scene.activeCameraObject;if(activeCamObj&&activeCamObj.cameraData){this.orbitTarget.set(activeCamObj.cameraData.orbitTarget);const directionToTarget=this.orbitTarget.sub(activeCamObj.transform.position);this.orbitRadius=directionToTarget.length();if(this.orbitRadius<0.1){this.orbitRadius=0.1;const camBasis=activeCamObj.getCameraBasisVectors();if(camBasis&&camBasis.forward.length()>0.5){activeCamObj.transform.position=this.orbitTarget.sub(camBasis.forward.mul(this.orbitRadius))}else{activeCamObj.transform.position=this.orbitTarget.sub(new Vec3(0,0,-1).mul(this.orbitRadius))}}}else{this.orbitTarget=new Vec3(0,0,0);this.orbitRadius=8;}}
-    onMouseDown(event){event.preventDefault();const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj)return;this.syncOrbitParametersFromActiveCamera();this.lastMousePos={x:event.clientX,y:event.clientY};if(event.button===0&&!event.shiftKey){this.isOrbiting=true;this.isPanning=false;this.viewportElement.style.cursor='grabbing'}else if(event.button===1||(event.button===0&&event.shiftKey)){this.isPanning=true;this.isOrbiting=false;this.viewportElement.style.cursor='move'}}
-    onMouseUp(event){if(this.isOrbiting||this.isPanning){this.isOrbiting=false;this.isPanning=false;this.viewportElement.style.cursor='grab'}}
-    onMouseMove(event){const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj||!activeCamObj.cameraData)return;if(!this.isOrbiting&&!this.isPanning)return;const dx=event.clientX-this.lastMousePos.x,dy=event.clientY-this.lastMousePos.y;this.lastMousePos={x:event.clientX,y:event.clientY};if(this.isOrbiting){let directionFromTarget=activeCamObj.transform.position.sub(this.orbitTarget);let currentRadius=directionFromTarget.length();if(currentRadius<1e-6)currentRadius=this.orbitRadius;let theta=Math.atan2(directionFromTarget.z,directionFromTarget.x);let phi=Math.acos(directionFromTarget.y/currentRadius);theta-=dx*0.005;phi-=dy*0.005;phi=Math.max(0.01,Math.min(Math.PI-0.01,phi));activeCamObj.transform.position.x=this.orbitTarget.x+currentRadius*Math.sin(phi)*Math.cos(theta);activeCamObj.transform.position.y=this.orbitTarget.y+currentRadius*Math.cos(phi);activeCamObj.transform.position.z=this.orbitTarget.z+currentRadius*Math.sin(phi)*Math.sin(theta)}else if(this.isPanning){const camBasis=activeCamObj.getCameraBasisVectors();if(!camBasis)return;const panScale=this.orbitRadius*this.panSpeed;const panVectorX=camBasis.right.mul(-dx*panScale);const panVectorY=camBasis.up.mul(dy*panScale);const totalPanOffset=panVectorX.add(panVectorY);activeCamObj.transform.position=activeCamObj.transform.position.add(totalPanOffset);activeCamObj.cameraData.orbitTarget=activeCamObj.cameraData.orbitTarget.add(totalPanOffset);this.orbitTarget.set(activeCamObj.cameraData.orbitTarget)}if(this.app.uiManager){this.app.uiManager.updateTransformInputs();this.app.uiManager.updateCameraControls();const currentRadius=activeCamObj.transform.position.sub(this.orbitTarget).length()||this.orbitRadius;this.app.uiManager.zoomSlider.value=(currentRadius*100).toFixed(0);this.app.uiManager.zoomValDisplay.textContent=(currentRadius*100).toFixed(0)}}
-    onWheel(event){event.preventDefault();const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj||!activeCamObj.cameraData)return;this.syncOrbitParametersFromActiveCamera();const zoomSpeedFactor=Math.max(0.1,this.orbitRadius/8);const newOrbitRadius=Math.max(0.1,this.orbitRadius+(event.deltaY>0?1:-1)*0.3*zoomSpeedFactor);let directionFromTarget=activeCamObj.transform.position.sub(this.orbitTarget);if(directionFromTarget.length()<1e-6){const camBasis=activeCamObj.getCameraBasisVectors();directionFromTarget=camBasis&&camBasis.forward.length()>0.5?camBasis.forward.mul(-1):new Vec3(0,0,-1)}directionFromTarget=directionFromTarget.normalize();activeCamObj.transform.position=this.orbitTarget.add(directionFromTarget.mul(newOrbitRadius));this.orbitRadius=newOrbitRadius;if(this.app.uiManager){this.app.uiManager.zoomSlider.value=(this.orbitRadius*100).toFixed(0);this.app.uiManager.zoomValDisplay.textContent=(this.orbitRadius*100).toFixed(0);this.app.uiManager.updateTransformInputs()}}
+    onMouseUp(event) {
+        // didDrag is now the primary flag to check if selection should be prevented.
+        // The isOrbiting/isPanning flags are reset here for camera control.
+        if (this.isOrbiting || this.isPanning) {
+            this.isOrbiting = false;
+            this.isPanning = false;
+            this.viewportElement.style.cursor = 'grab';
+        }
+        // Note: didDrag is NOT reset here, it's reset on the next mousedown.
+        // This allows App.handleViewportClick to check its value from the completed mouse action.
+    }
+
+    onMouseMove(event) {
+        const activeCamObj = this.app.scene.activeCameraObject;
+        if (!activeCamObj || !activeCamObj.cameraData) return;
+        
+        if (!this.isOrbiting && !this.isPanning) return; // Only proceed if a drag operation is active
+
+        const dxSinceMouseDown = Math.abs(event.clientX - this.mouseDownPos.x);
+        const dySinceMouseDown = Math.abs(event.clientY - this.mouseDownPos.y);
+        if (dxSinceMouseDown > this.dragThreshold || dySinceMouseDown > this.dragThreshold) {
+            this.didDrag = true; // It's a drag, not a click
+        }
+
+        const dx = event.clientX - this.lastMousePos.x;
+        const dy = event.clientY - this.lastMousePos.y;
+        this.lastMousePos = { x: event.clientX, y: event.clientY };
+
+        if (this.isOrbiting) {
+            let directionFromTarget=activeCamObj.transform.position.sub(this.orbitTarget);let currentRadius=directionFromTarget.length();if(currentRadius<1e-6)currentRadius=this.orbitRadius;let theta=Math.atan2(directionFromTarget.z,directionFromTarget.x);let phi=Math.acos(directionFromTarget.y/currentRadius);theta-=dx*0.005;phi-=dy*0.005;phi=Math.max(0.01,Math.min(Math.PI-0.01,phi));activeCamObj.transform.position.x=this.orbitTarget.x+currentRadius*Math.sin(phi)*Math.cos(theta);activeCamObj.transform.position.y=this.orbitTarget.y+currentRadius*Math.cos(phi);activeCamObj.transform.position.z=this.orbitTarget.z+currentRadius*Math.sin(phi)*Math.sin(theta);
+        } else if (this.isPanning) {
+            const camBasis=activeCamObj.getCameraBasisVectors();if(!camBasis)return;const panScale=this.orbitRadius*this.panSpeed;const panVectorX=camBasis.right.mul(-dx*panScale);const panVectorY=camBasis.up.mul(dy*panScale);const totalPanOffset=panVectorX.add(panVectorY);activeCamObj.transform.position=activeCamObj.transform.position.add(totalPanOffset);activeCamObj.cameraData.orbitTarget=activeCamObj.cameraData.orbitTarget.add(totalPanOffset);this.orbitTarget.set(activeCamObj.cameraData.orbitTarget);
+        }
+
+        if (this.app.uiManager) { 
+            this.app.uiManager.updateTransformInputs();this.app.uiManager.updateCameraControls();const currentRadius=activeCamObj.transform.position.sub(this.orbitTarget).length()||this.orbitRadius;this.app.uiManager.zoomSlider.value=(currentRadius*100).toFixed(0);this.app.uiManager.zoomValDisplay.textContent=(currentRadius*100).toFixed(0);
+        }
+    }
+    onWheel(event){ 
+        event.preventDefault();const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj||!activeCamObj.cameraData)return;this.syncOrbitParametersFromActiveCamera();const zoomSpeedFactor=Math.max(0.1,this.orbitRadius/8);const newOrbitRadius=Math.max(0.1,this.orbitRadius+(event.deltaY>0?1:-1)*0.3*zoomSpeedFactor);let directionFromTarget=activeCamObj.transform.position.sub(this.orbitTarget);if(directionFromTarget.length()<1e-6){const camBasis=activeCamObj.getCameraBasisVectors();directionFromTarget=camBasis&&camBasis.forward.length()>0.5?camBasis.forward.mul(-1):new Vec3(0,0,-1)}directionFromTarget=directionFromTarget.normalize();activeCamObj.transform.position=this.orbitTarget.add(directionFromTarget.mul(newOrbitRadius));this.orbitRadius=newOrbitRadius;if(this.app.uiManager){this.app.uiManager.zoomSlider.value=(this.orbitRadius*100).toFixed(0);this.app.uiManager.zoomValDisplay.textContent=(this.orbitRadius*100).toFixed(0);this.app.uiManager.updateTransformInputs()}
+    }
 }
-class UIManager { /* ... Same as v7 ... */
-    constructor(app){this.app=app;this.wireframeCheckbox=document.getElementById('wireframe');this.zoomSlider=document.getElementById('zoom');this.zoomValDisplay=document.getElementById('zoomVal');this.segmentsSlider=document.getElementById('segments');this.segValDisplay=document.getElementById('segVal');this.camDebugDisplay=document.getElementById('camDebug');this.objectListSelect=document.getElementById('objectList');this.activeCameraSelect=document.getElementById('activeCameraList');this.addCubeButton=document.getElementById('addCube');this.addSphereButton=document.getElementById('addSphere');this.addCameraButton=document.getElementById('addCamera');this.posXInput=document.getElementById('posX');this.posYInput=document.getElementById('posY');this.posZInput=document.getElementById('posZ');this.rotXInput=document.getElementById('rotX');this.rotYInput=document.getElementById('rotY');this.rotZInput=document.getElementById('rotZ');this.scaleAllInput=document.getElementById('scaleAll');this.cameraControlsDiv=document.getElementById('cameraControls');this.camFovSlider=document.getElementById('camFov');this.camFovValDisplay=document.getElementById('camFovVal');this.camTargetXInput=document.getElementById('camTargetX');this.camTargetYInput=document.getElementById('camTargetY');this.camTargetZInput=document.getElementById('camTargetZ');this.bottomBar=document.getElementById('bottombar');this.initEventListeners();this.initPanelToggle()}
+class UIManager { 
+    constructor(app){this.app=app;this.wireframeCheckbox=document.getElementById('wireframe');this.zoomSlider=document.getElementById('zoom');this.zoomValDisplay=document.getElementById('zoomVal');this.segmentsSlider=document.getElementById('segments');this.segValDisplay=document.getElementById('segVal');this.camDebugDisplay=document.getElementById('camDebug');this.objectListSelect=document.getElementById('objectList');this.activeCameraSelect=document.getElementById('activeCameraList');this.addCubeButton=document.getElementById('addCube');this.addSphereButton=document.getElementById('addSphere');this.addCameraButton=document.getElementById('addCamera');this.posXInput=document.getElementById('posX');this.posYInput=document.getElementById('posY');this.posZInput=document.getElementById('posZ');this.rotXInput=document.getElementById('rotX');this.rotYInput=document.getElementById('rotY');this.rotZInput=document.getElementById('rotZ');this.scaleAllInput=document.getElementById('scaleAll');this.cameraControlsDiv=document.getElementById('cameraControls');this.camFovSlider=document.getElementById('camFov');this.camFovValDisplay=document.getElementById('camFovVal');this.camTargetXInput=document.getElementById('camTargetX');this.camTargetYInput=document.getElementById('camTargetY');this.camTargetZInput=document.getElementById('camTargetZ');this.bottomBar=document.getElementById('bottombar');this.deleteSelectedMenuButton = document.getElementById('deleteSelectedMenu'); this.initEventListeners();this.initPanelToggle();}
     initPanelToggle(){document.querySelectorAll('.panel-header').forEach(header=>{header.addEventListener('click',()=>{const targetId=header.dataset.target,content=document.getElementById(targetId);content.classList.toggle('hidden');header.textContent=(content.classList.contains('hidden')?'►':'▼')+' '+header.textContent.substring(2)})})}
-    initEventListeners(){this.wireframeCheckbox.addEventListener('change',()=>this.app.setWireframe(this.wireframeCheckbox.checked));this.zoomSlider.addEventListener('input',()=>{const camObj=this.app.scene.activeCameraObject;if(camObj&&camObj.cameraData){const newR=parseFloat(this.zoomSlider.value)/100;this.app.viewportInputHandler.orbitRadius=newR;let dir=camObj.transform.position.sub(camObj.cameraData.orbitTarget).normalize();if(dir.length()===0)dir=new Vec3(0,0,-1);camObj.transform.position=camObj.cameraData.orbitTarget.add(dir.mul(newR));this.app.uiManager.updateTransformInputs();this.app.uiManager.updateCameraControls()}this.zoomValDisplay.textContent=this.zoomSlider.value});this.segmentsSlider.addEventListener('input',()=>{const s=parseInt(this.segmentsSlider.value);this.segValDisplay.textContent=s.toString();this.app.setSphereSegments(s);if(this.app.selectedObject?.meshData?.name.startsWith("SphereGeom")){this.app.updateSelectedObjectGeometry(Mesh.createSphere(1,s))}});this.addCubeButton.addEventListener('click',()=>this.app.addPrimitive('cube'));this.addSphereButton.addEventListener('click',()=>this.app.addPrimitive('sphere'));this.addCameraButton.addEventListener('click',()=>this.app.addPrimitive('camera'));this.objectListSelect.addEventListener('change',e=>{const id=parseInt(e.target.value);this.app.selectObjectById(isNaN(id)?null:id)});this.activeCameraSelect.addEventListener('change',e=>{const id=parseInt(e.target.value),camObj=this.app.scene.getObjectById(id);if(camObj)this.app.scene.setActiveCamera(camObj);this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera();this.updateUIFromAppState()});['X','Y','Z'].forEach(ax=>{document.getElementById(`pos${ax}`).addEventListener('input',e=>{if(this.app.selectedObject)this.app.selectedObject.transform.position[ax.toLowerCase()]=parseFloat(e.target.value)||0;this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()});document.getElementById(`rot${ax}`).addEventListener('input',e=>{if(this.app.selectedObject)this.app.selectedObject.transform.rotation[ax.toLowerCase()]=(parseFloat(e.target.value)||0)*DEG_TO_RAD;this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()});document.getElementById(`camTarget${ax}`).addEventListener('input',e=>{const selCam=this.app.selectedObject;if(selCam?.cameraData){selCam.cameraData.orbitTarget[ax.toLowerCase()]=parseFloat(e.target.value)||0}if(this.app.scene.activeCameraObject===selCam){this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()}})});this.scaleAllInput.addEventListener('input',e=>{if(this.app.selectedObject){const v=Math.max(.01,parseFloat(e.target.value)||1);this.app.selectedObject.transform.scale=new Vec3(v,v,v)}});this.camFovSlider.addEventListener('input',e=>{if(this.app.selectedObject?.cameraData){const fov=parseFloat(e.target.value);this.app.selectedObject.cameraData.fov=fov*DEG_TO_RAD;this.camFovValDisplay.textContent=fov.toString()}})}
+    initEventListeners(){this.wireframeCheckbox.addEventListener('change',()=>this.app.setWireframe(this.wireframeCheckbox.checked));this.zoomSlider.addEventListener('input',()=>{const camObj=this.app.scene.activeCameraObject;if(camObj&&camObj.cameraData){const newR=parseFloat(this.zoomSlider.value)/100;this.app.viewportInputHandler.orbitRadius=newR;let dir=camObj.transform.position.sub(camObj.cameraData.orbitTarget).normalize();if(dir.length()===0)dir=new Vec3(0,0,-1);camObj.transform.position=camObj.cameraData.orbitTarget.add(dir.mul(newR));this.app.uiManager.updateTransformInputs();this.app.uiManager.updateCameraControls()}this.zoomValDisplay.textContent=this.zoomSlider.value});this.segmentsSlider.addEventListener('input',()=>{const s=parseInt(this.segmentsSlider.value);this.segValDisplay.textContent=s.toString();this.app.setSphereSegments(s);if(this.app.selectedObject?.meshData?.name.startsWith("SphereGeom")){this.app.updateSelectedObjectGeometry(Mesh.createSphere(1,s))}});this.addCubeButton.addEventListener('click',()=>this.app.addPrimitive('cube'));this.addSphereButton.addEventListener('click',()=>this.app.addPrimitive('sphere'));this.addCameraButton.addEventListener('click',()=>this.app.addPrimitive('camera'));this.objectListSelect.addEventListener('change',e=>{const id=parseInt(e.target.value);this.app.selectObjectById(isNaN(id)?null:id)});this.activeCameraSelect.addEventListener('change',e=>{const id=parseInt(e.target.value),camObj=this.app.scene.getObjectById(id);if(camObj)this.app.scene.setActiveCamera(camObj);this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera();this.updateUIFromAppState()});['X','Y','Z'].forEach(ax=>{document.getElementById(`pos${ax}`).addEventListener('input',e=>{if(this.app.selectedObject)this.app.selectedObject.transform.position[ax.toLowerCase()]=parseFloat(e.target.value)||0;this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()});document.getElementById(`rot${ax}`).addEventListener('input',e=>{if(this.app.selectedObject)this.app.selectedObject.transform.rotation[ax.toLowerCase()]=(parseFloat(e.target.value)||0)*DEG_TO_RAD;this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()});document.getElementById(`camTarget${ax}`).addEventListener('input',e=>{const selCam=this.app.selectedObject;if(selCam?.cameraData){selCam.cameraData.orbitTarget[ax.toLowerCase()]=parseFloat(e.target.value)||0}if(this.app.scene.activeCameraObject===selCam){this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()}})});this.scaleAllInput.addEventListener('input',e=>{if(this.app.selectedObject){const v=Math.max(.01,parseFloat(e.target.value)||1);this.app.selectedObject.transform.scale=new Vec3(v,v,v)}});this.camFovSlider.addEventListener('input',e=>{if(this.app.selectedObject?.cameraData){const fov=parseFloat(e.target.value);this.app.selectedObject.cameraData.fov=fov*DEG_TO_RAD;this.camFovValDisplay.textContent=fov.toString()}}); if(this.deleteSelectedMenuButton) this.deleteSelectedMenuButton.addEventListener('click', () => {if(this.app.selectedObject) this.app.deleteObject(this.app.selectedObject);});}
     updateUIFromAppState(){if(!this.app)return;this.wireframeCheckbox.checked=this.app.renderer.wireframe;const camObj=this.app.scene.activeCameraObject;if(camObj&&camObj.cameraData){const r=this.app.viewportInputHandler.orbitRadius;this.zoomSlider.value=(r*100).toFixed(0);this.zoomValDisplay.textContent=(r*100).toFixed(0)}this.segmentsSlider.value=this.app.sphereSegments.toString();this.segValDisplay.textContent=this.app.sphereSegments.toString();this.refreshObjectList();this.refreshActiveCameraList();this.updateTransformInputs();this.updateCameraControls()}
     refreshObjectList(){if(!this.app)return;const sId=this.app.selectedObject?.id;this.objectListSelect.innerHTML='';if(this.app.scene.objects.length===0){const o=document.createElement('option');o.textContent="(No objects)";o.disabled=true;this.objectListSelect.appendChild(o);if(this.app.selectedObject)this.app.selectObjectById(null);return}this.app.scene.objects.forEach(obj=>{const o=document.createElement('option');o.value=obj.id;o.textContent=`${obj.cameraData?'📷':(obj.meshData?.name.includes("Cube")?'🧊':(obj.meshData?.name.includes("Sphere")?'ሉ':'📦'))} ${obj.name}`;if(obj.id===sId)o.selected=true;this.objectListSelect.appendChild(o)});let sV=this.app.selectedObject&&this.app.scene.objects.some(o=>o.id===this.app.selectedObject.id);if((!sV||!this.app.selectedObject)&&this.app.scene.objects.length>0){this.objectListSelect.selectedIndex=0;this.app.selectObjectById(parseInt(this.objectListSelect.value))}}
     refreshActiveCameraList(){if(!this.app)return;const cACId=this.app.scene.activeCameraObject?.id;this.activeCameraSelect.innerHTML='';const cOs=this.app.scene.getCameras();if(cOs.length===0){const opt=document.createElement('option');opt.textContent="(No cameras)";opt.disabled=true;this.activeCameraSelect.appendChild(opt)}else{cOs.forEach(cO=>{const opt=document.createElement('option');opt.value=cO.id;opt.textContent=cO.name;if(cO.id===cACId)opt.selected=true;this.activeCameraSelect.appendChild(opt)})}}
@@ -209,19 +233,22 @@ class App {
         this.renderer=new SVGRenderer(this.svgElement);
         this.selectedObject=null;
         this.sphereSegments=16;
-        this.viewportInputHandler=new ViewportInputHandler(document.getElementById('viewport'),this); // Corrected
+        this.viewportInputHandler=new ViewportInputHandler(document.getElementById('viewport'),this);
         this.uiManager=new UIManager(this);
         this.initDefaultCamera();
         this.uiManager.updateUIFromAppState();
 
-        // NEW: Add click listener to SVG for object selection
         this.svgElement.addEventListener('click', this.handleViewportClick.bind(this));
+        window.addEventListener('keydown', this.handleKeyDown.bind(this));
     }
 
     handleViewportClick(event) {
-        if (this.viewportInputHandler.isOrbiting || this.viewportInputHandler.isPanning) {
-            // Don't select if click was end of a drag operation for orbit/pan
-            return;
+        // Check the didDrag flag from the input handler
+        if (this.viewportInputHandler.didDrag) {
+            // If it was a drag, reset the flag for the next distinct mouse action and do nothing for selection.
+            // The flag will be reset on the next mousedown anyway, but good to be explicit.
+            // this.viewportInputHandler.didDrag = false; // Actually, reset on mousedown is better.
+            return; 
         }
 
         const rect = this.svgElement.getBoundingClientRect();
@@ -231,33 +258,38 @@ class App {
         };
 
         let bestHit = null;
-        // Iterate through renderableFaces, which are already sorted by depth (closest first) by the renderer
-        for (const faceInfo of this.renderer.renderableFaces) {
+        for (const faceInfo of this.renderer.renderableFaces) { // Already sorted closest first
             if (isPointInPolygon(clickPoint, faceInfo.screenPoints)) {
-                bestHit = faceInfo.object; // Since sorted by depth, first hit is the one
+                bestHit = faceInfo.object; 
                 break; 
             }
         }
 
         if (bestHit) {
             this.selectObjectById(bestHit.id);
-            this.uiManager.setStatus(`Selected ${bestHit.name} from viewport.`);
         } else {
-            this.selectObjectById(null); // Clicked on empty space
-            this.uiManager.setStatus("Clicked empty space.");
+            this.selectObjectById(null); // Clicked on empty space, deselect
         }
     }
-
-    initDefaultCamera(){const dCO=new Object3D(this.generateUniqueName("Camera"));dCO.cameraData=new CameraData(60);dCO.transform.position=new Vec3(0,2,5);dCO.cameraData.orbitTarget=new Vec3(0,0,0);this.scene.addObject(dCO);this.scene.setActiveCamera(dCO);this.viewportInputHandler.syncOrbitParametersFromActiveCamera();}
-    init(){this.addPrimitive('cube');this.selectObjectById(this.scene.objects[0].id);this.resizeViewport();window.addEventListener('resize',()=>this.resizeViewport());this.gameLoop();this.uiManager.setStatus("Ready.")}
+    
+    handleKeyDown(event) { /* ... Same as v10 ... */
+        if((event.key==='f'||event.key==='F'||event.key==='.'||event.code==='NumpadDecimal')&&this.selectedObject){event.preventDefault();this.frameSelectedObject(this.selectedObject)}else if((event.key==='Delete'||event.key==='Backspace')&&this.selectedObject){event.preventDefault();this.deleteObject(this.selectedObject)}
+    }
+    deleteObject(objectToDelete) { /* ... Same as v10 ... */
+        if(!objectToDelete)return;const oldObjectName=objectToDelete.name,wasActiveCamera=(this.scene.activeCameraObject&&this.scene.activeCameraObject.id===objectToDelete.id);this.scene.removeObject(objectToDelete);if(this.selectedObject&&this.selectedObject.id===objectToDelete.id){this.selectedObject=null}if(wasActiveCamera){const remainingCameras=this.scene.getCameras();if(remainingCameras.length>0){this.scene.setActiveCamera(remainingCameras[0])}else{this.initDefaultCamera();this.uiManager.setStatus("Deleted active camera. New default camera created.")}this.viewportInputHandler.syncOrbitParametersFromActiveCamera()}this.uiManager.setStatus(`Deleted: ${oldObjectName}`);this.uiManager.updateUIFromAppState()}
+    frameSelectedObject(objectToFrame) { /* ... Same as v10 ... */
+        if(!objectToFrame||!this.scene.activeCameraObject||!this.scene.activeCameraObject.cameraData)return;const activeCam=this.scene.activeCameraObject,bounds=objectToFrame.getApproximateWorldBounds();activeCam.cameraData.orbitTarget.set(bounds.center);const objectSize=Math.max(bounds.size.x,bounds.size.y,bounds.size.z,0.1),cameraFov=activeCam.cameraData.fov;let newRadius=(objectSize/2)/Math.tan(cameraFov/2);newRadius*=1.8;newRadius=Math.max(newRadius,objectSize*1.2,0.5);let currentCamDir=activeCam.transform.position.sub(this.viewportInputHandler.orbitTarget).normalize();if(currentCamDir.length()<1e-6){const basis=activeCam.getCameraBasisVectors();currentCamDir=basis?basis.forward.mul(-1):new Vec3(0,0.5,-1).normalize()}activeCam.transform.position=bounds.center.add(currentCamDir.mul(newRadius));this.viewportInputHandler.syncOrbitParametersFromActiveCamera();this.uiManager.updateUIFromAppState();this.uiManager.setStatus(`Framed: ${objectToFrame.name}`);
+    }
+    initDefaultCamera(){/* ... Same as v10 ... */ const dCO=new Object3D(this.generateUniqueName("Camera"));dCO.cameraData=new CameraData(60);dCO.transform.position=new Vec3(0,2,5);dCO.cameraData.orbitTarget=new Vec3(0,0,0);this.scene.addObject(dCO);this.scene.setActiveCamera(dCO);this.viewportInputHandler.syncOrbitParametersFromActiveCamera();}
+    init(){/* ... Same as v10 ... */ this.addPrimitive('cube');this.selectObjectById(this.scene.objects[0].id);this.resizeViewport();window.addEventListener('resize',()=>this.resizeViewport());this.gameLoop();this.uiManager.setStatus("Ready (F or . to Frame; Del/Bcksp to Delete)");}
     resizeViewport(){}
-    addPrimitive(type){let bN,nO;if(type==='cube'){bN='Cube';nO=new Object3D(this.generateUniqueName(bN));nO.meshData=Mesh.createCube(1);}else if(type==='sphere'){bN='Sphere';nO=new Object3D(this.generateUniqueName(bN));nO.meshData=Mesh.createSphere(1,this.sphereSegments);}else if(type==='camera'){bN='Camera';nO=new Object3D(this.generateUniqueName(bN));nO.cameraData=new CameraData();nO.gizmoMesh=Mesh.createCameraGizmo();const actCamPos=this.scene.activeCameraObject?.transform.position||new Vec3(0,0,5);nO.transform.position=actCamPos.add(new Vec3(1,0,-1));nO.cameraData.orbitTarget=new Vec3(0,0,0);}else{this.uiManager?.setStatus(`Error:Type ${type}`);return null;}this.scene.addObject(nO);this.selectObjectById(nO.id);if(type==='camera')this.uiManager.refreshActiveCameraList();this.uiManager?.setStatus(`Added ${nO.name}`);return nO;}
-    generateUniqueName(bN){let n=bN,c=0;const eN=new Set(this.scene.objects.map(o=>o.name));if(eN.has(n)){c=1;do{n=`${bN}.${String(c++).padStart(3,'0')}`; }while(eN.has(n));}return n;}
-    selectObjectById(id){this.selectedObject=(id===null)?null:this.scene.getObjectById(id);this.renderer.selectedObjectId=this.selectedObject?.id||null;if(this.uiManager){this.uiManager.refreshObjectList();this.uiManager.updateTransformInputs();this.uiManager.updateCameraControls();if(this.selectedObject)this.uiManager.setStatus(`Selected: ${this.selectedObject.name}`);else this.uiManager.setStatus(this.scene.objects.length>0?`Sel. cleared.`:`Scene empty.`);}}
-    setWireframe(wf){this.renderer.wireframe=wf;this.uiManager?.setStatus(`Wireframe ${wf?'On':'Off'}`);}
-    setSphereSegments(s){this.sphereSegments=Math.max(3,s);this.uiManager?.setStatus(`Sphere segs:${this.sphereSegments}`);}
-    updateSelectedObjectGeometry(nMD){if(this.selectedObject?.meshData){this.selectedObject.meshData=nMD;if(nMD.name)this.selectedObject.meshData.name=nMD.name;this.uiManager?.setStatus(`Updated geom for ${this.selectedObject.name}`);}}
-    gameLoop(){if(this.scene.activeCameraObject){this.renderer.render(this.scene,this.scene.activeCameraObject);}else{this.renderer.svgElement.innerHTML='<text x="10" y="20" fill="red">Critical: No active camera object in scene.</text>';}this.uiManager?.updateCameraDebug();requestAnimationFrame(()=>this.gameLoop());}
+    addPrimitive(type){/* ... Same as v10 ... */ let bN,nO;if(type==='cube'){bN='Cube';nO=new Object3D(this.generateUniqueName(bN));nO.meshData=Mesh.createCube(1);}else if(type==='sphere'){bN='Sphere';nO=new Object3D(this.generateUniqueName(bN));nO.meshData=Mesh.createSphere(1,this.sphereSegments);}else if(type==='camera'){bN='Camera';nO=new Object3D(this.generateUniqueName(bN));nO.cameraData=new CameraData();nO.gizmoMesh=Mesh.createCameraGizmo();const actCamPos=this.scene.activeCameraObject?.transform.position||new Vec3(0,0,5);nO.transform.position=actCamPos.add(new Vec3(1,0,-1));nO.cameraData.orbitTarget=new Vec3(0,0,0);}else{this.uiManager?.setStatus(`Error:Type ${type}`);return null;}this.scene.addObject(nO);this.selectObjectById(nO.id);if(type==='camera')this.uiManager.refreshActiveCameraList();this.uiManager?.setStatus(`Added ${nO.name}`);return nO;}
+    generateUniqueName(bN){/* ... Same as v10 ... */ let n=bN,c=0;const eN=new Set(this.scene.objects.map(o=>o.name));if(eN.has(n)){c=1;do{n=`${bN}.${String(c++).padStart(3,'0')}`; }while(eN.has(n));}return n;}
+    selectObjectById(id){/* ... Same as v10 ... */ this.selectedObject=(id===null)?null:this.scene.getObjectById(id);this.renderer.selectedObjectId=this.selectedObject?.id||null;if(this.uiManager){this.uiManager.refreshObjectList();this.uiManager.updateTransformInputs();this.uiManager.updateCameraControls();if(this.selectedObject)this.uiManager.setStatus(`Selected: ${this.selectedObject.name}`);else this.uiManager.setStatus(this.scene.objects.length>0?`Sel. cleared.`:`Scene empty.`);}}
+    setWireframe(wf){/* ... Same as v10 ... */ this.renderer.wireframe=wf;this.uiManager?.setStatus(`Wireframe ${wf?'On':'Off'}`);}
+    setSphereSegments(s){/* ... Same as v10 ... */ this.sphereSegments=Math.max(3,s);this.uiManager?.setStatus(`Sphere segs:${this.sphereSegments}`);}
+    updateSelectedObjectGeometry(nMD){/* ... Same as v10 ... */ if(this.selectedObject?.meshData){this.selectedObject.meshData=nMD;if(nMD.name)this.selectedObject.meshData.name=nMD.name;this.uiManager?.setStatus(`Updated geom for ${this.selectedObject.name}`);}}
+    gameLoop(){/* ... Same as v10 ... */ if(this.scene.activeCameraObject){this.renderer.render(this.scene,this.scene.activeCameraObject);}else{this.renderer.svgElement.innerHTML='<text x="10" y="20" fill="red">Critical: No active camera object in scene.</text>';}this.uiManager?.updateCameraDebug();requestAnimationFrame(()=>this.gameLoop());}
 }
 window.addEventListener('DOMContentLoaded',()=>{const app=new App();window.myApp=app;app.init();});
 </script>
