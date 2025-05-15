@@ -3,359 +3,263 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Vanilla JS SVG 3D Engine</title>
+  <title>Vanilla JS SVG 3D Engine (v8 - Viewport Selection)</title>
   <style>
+    /* ... Same CSS as v7 ... */
     html,body { margin:0; padding:0; overflow:hidden; height:100vh; font-family:Arial, sans-serif; color:#eee; background:#222; }
     body{ display:flex; flex-direction:column; }
-    #topbar{ height:26px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:14px; }
-    #topbar .menu{ margin-right:12px; cursor:pointer; user-select:none; }
+    #topbar{ height:26px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:14px; user-select:none; }
+    #topbar .menu{ margin-right:12px; cursor:pointer; }
     #topbar .menu:hover{ background:#444; }
     #main{ flex:1; display:flex; min-height:0; }
-    #toolbar{ width:40px; background:#3a3a3a; display:flex; flex-direction:column; align-items:center; padding-top:4px; }
+    #toolbar{ width:40px; background:#3a3a3a; display:flex; flex-direction:column; align-items:center; padding-top:4px; user-select:none;}
     #toolbar button{ width:24px; height:24px; margin:4px 0; background:#555; border:1px solid #000; cursor:pointer; }
     #toolbar button:hover{ background:#777; }
-    #viewport{ flex:1; position:relative; background:#23232a; }
+    #viewport{ flex:1; position:relative; background:#23232a; cursor: grab; user-select: none; -webkit-user-select: none; -ms-user-select: none;}
     #svg3d{ width:100%; height:100%; display:block; }
-    #sidebar{ width:260px; background:#3a3a3a; padding:8px; overflow:auto; font-size:13px; }
-    #controls label{ display:block; margin:4px 0; }
-    #controls input[type="range"]{ width:100%; }
-    #camDebug{ margin-top:8px; background:#222a; padding:4px; border-radius:4px; color:#9cf; }
-    #bottombar{ height:22px; background:#2e2e2e; display:flex; align-items:center; padding:0 8px; font-size:12px; }
-    #objectList{ width:100%; }
-    #transformControls{ margin-top:8px; }
+    #sidebar{ width:280px; background:#3a3a3a; padding:0; overflow:auto; font-size:13px; }
+    #sidebar .panel-header { background:#2e2e2e; padding: 5px 8px; cursor:pointer; user-select:none; font-weight:bold; border-top: 1px solid #4a4a4a; border-bottom: 1px solid #222;}
+    #sidebar .panel-header:first-child { border-top: none; }
+    #sidebar .panel-content { padding: 8px; border-bottom: 1px solid #222; }
+    #sidebar .panel-content.hidden { display:none; }
+    #sidebar label{ display:block; margin:6px 0; }
+    #sidebar input[type="range"], #sidebar select, #sidebar input[type="number"] { width:100%; box-sizing: border-box; background: #222; color:#eee; border:1px solid #555; padding:3px;}
+    #sidebar input[type="checkbox"] { vertical-align: middle; margin-right: 4px;}
+    #sidebar button { background:#555; color:#eee; border:1px solid #000; padding: 4px 8px; margin-top:5px; cursor:pointer; width:100%;}
+    #sidebar button:hover { background:#777;}
+    #camDebug{ margin-top:8px; background:#222a; padding:4px; border-radius:4px; color:#9cf; font-size:11px; }
+    #bottombar{ height:22px; background:#2e2e2e; padding:0 8px; font-size:12px; display:flex; align-items:center; user-select:none;}
   </style>
 </head>
 <body>
+  <!-- ... Same HTML structure as v7 ... -->
   <div id="topbar">
-    <span class="menu">File</span><span class="menu">Edit</span><span class="menu">Add</span><span class="menu">View</span><span class="menu">Select</span><span class="menu">Object</span>
+    <span class="menu" title="File operations (not implemented)">File</span>
+    <span class="menu" title="Edit operations (not implemented)">Edit</span>
+    <span class="menu" title="Add new objects">Add</span>
   </div>
   <div id="main">
     <div id="toolbar">
-      <button title="Select">S</button>
+      <button title="Select Tool (S - not implemented)">S</button>
     </div>
-    <div id="viewport">
-      <svg id="svg3d"></svg>
-    </div>
+    <div id="viewport"> <svg id="svg3d"></svg> </div>
     <div id="sidebar">
-      <h3 style="margin:0 0 8px 0;">Controls</h3>
-      <div id="controls">
-        <label><input type="checkbox" id="wireframe"> Wireframe</label>
-        <label>Zoom <input type="range" id="zoom" min="200" max="2000" value="800"></label>
-        <span id="zoomVal" style="display:block;">800</span>
-        <label>Sphere Segments <input type="range" id="segments" min="6" max="48" value="16"></label>
-        <span id="segVal" style="display:block;">16</span>
-        <label>Object <select id="objectList"></select></label>
-        <button id="addCube">Add Cube</button>
-        <button id="addSphere">Add Sphere</button>
-        <div id="transformControls">
-          <label>X <input type="number" id="posX" step="0.1"></label>
-          <label>Y <input type="number" id="posY" step="0.1"></label>
-          <label>Z <input type="number" id="posZ" step="0.1"></label>
-          <label>Scale <input type="number" id="scaleAll" step="0.1" value="1"></label>
+      <div class="panel">
+        <div class="panel-header" data-target="sceneSetupContent">▼ Scene Setup</div>
+        <div class.panel-content" id="sceneSetupContent">
+          <label title="Choose the camera to view the scene through">Active Viewport Cam: <select id="activeCameraList"></select></label>
+          <label title="Select an object in the scene">Object <select id="objectList"></select></label>
+          <button id="addCube" title="Add a new Cube primitive to the scene">Add Cube</button>
+          <button id="addSphere" title="Add a new Sphere primitive to the scene">Add Sphere</button>
+          <button id="addCamera" title="Add a new Camera object to the scene">Add Camera</button>
         </div>
       </div>
-      <div id="camDebug"></div>
+      <div class="panel">
+        <div class="panel-header" data-target="propertiesContent">► Properties</div>
+        <div class="panel-content hidden" id="propertiesContent">
+          <div id="transformControls">
+            <h4 style="margin:0 0 4px 0;">Transform</h4>
+            <label title="Object's X coordinate">Location X <input type="number" id="posX" step="0.1"></label>
+            <label title="Object's Y coordinate">Location Y <input type="number" id="posY" step="0.1"></label>
+            <label title="Object's Z coordinate">Location Z <input type="number" id="posZ" step="0.1"></label>
+            <label title="Rotation around X-axis (degrees)">Rotation X <input type="number" id="rotX" step="1"></label>
+            <label title="Rotation around Y-axis (degrees)">Rotation Y <input type="number" id="rotY" step="1"></label>
+            <label title="Rotation around Z-axis (degrees)">Rotation Z <input type="number" id="rotZ" step="1"></label>
+            <label title="Uniform scale of the object">Scale <input type="number" id="scaleAll" step="0.1" value="1"></label>
+          </div>
+          <div id="cameraControls" style="display:none;">
+            <h4 style="margin:8px 0 4px 0;">Camera Properties</h4>
+            <label title="Field of View of the camera (degrees)">FOV <input type="range" id="camFov" min="10" max="120" value="60"></label><span id="camFovVal" style="display:block; text-align:right;">60</span>
+            <label title="Camera's look-at target X coordinate">Target X <input type="number" id="camTargetX" step="0.1"></label>
+            <label title="Camera's look-at target Y coordinate">Target Y <input type="number" id="camTargetY" step="0.1"></label>
+            <label title="Camera's look-at target Z coordinate">Target Z <input type="number" id="camTargetZ" step="0.1"></label>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header" data-target="viewportDisplayContent">► Viewport Display</div>
+        <div class="panel-content hidden" id="viewportDisplayContent">
+          <label title="Toggle wireframe rendering mode"><input type="checkbox" id="wireframe"> Wireframe</label>
+          <label title="Adjust viewport camera zoom level">Zoom (Orbit Radius) <input type="range" id="zoom" min="100" max="5000" value="800"></label><span id="zoomVal" style="display:block; text-align:right;">800</span>
+          <label title="Number of segments for new spheres">Sphere Segments <input type="range" id="segments" min="3" max="48" value="16"></label><span id="segVal" style="display:block; text-align:right;">16</span>
+          <div id="camDebug"></div>
+        </div>
+      </div>
     </div>
   </div>
-  <div id="bottombar">Ready</div>
+  <div id="bottombar">Loading...</div>
 
 <script>
-// =============================================
-// Minimal 3D Engine (SVG Renderer)              
-// =============================================
+const DEG_TO_RAD = Math.PI/180;
+const RAD_TO_DEG = 180/Math.PI;
 
-// ---------- Vector3 Utility ------------------
-class Vec3 {
-  constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z;}
-  add(v){return new Vec3(this.x+v.x,this.y+v.y,this.z+v.z);}  
-  sub(v){return new Vec3(this.x-v.x,this.y-v.y,this.z-v.z);}  
-  mul(s){return new Vec3(this.x*s,this.y*s,this.z*s);}        
-  dot(v){return this.x*v.x+this.y*v.y+this.z*v.z;}            
-  cross(v){return new Vec3(
-    this.y*v.z - this.z*v.y,
-    this.z*v.x - this.x*v.z,
-    this.x*v.y - this.y*v.x
-  );}
-  length(){return Math.sqrt(this.x*this.x+this.y*this.y+this.z*this.z);} 
-  normalize(){const len=this.length()||1; return this.mul(1/len);}        
+class Vec3 { /* ... Same as v7 ... */
+  constructor(x=0,y=0,z=0){this.x=x;this.y=y;this.z=z}add(v){return new Vec3(this.x+v.x,this.y+v.y,this.z+v.z)}sub(v){return new Vec3(this.x-v.x,this.y-v.y,this.z-v.z)}mul(s){return new Vec3(this.x*s,this.y*s,this.z*s)}dot(v){return this.x*v.x+this.y*v.y+this.z*v.z}cross(v){return new Vec3(this.y*v.z-this.z*v.y,this.z*v.x-this.x*v.z,this.x*v.y-this.y*v.x)}length(){const l=this.x*this.x+this.y*this.y+this.z*this.z;return l>1e-9?Math.sqrt(l):0}normalize(){const len=this.length();return len>1e-9?this.mul(1/len):new Vec3}clone(){return new Vec3(this.x,this.y,this.z)}set(v){this.x=v.x;this.y=v.y;this.z=v.z;return this}static computeNormal(v0,v1,v2){return v1.sub(v0).cross(v2.sub(v0)).normalize()}
+}
+class Transform { /* ... Same as v7 ... */
+    constructor(){this.position=new Vec3;this.rotation=new Vec3;this.scale=new Vec3(1,1,1)}
+    applyToVertex(vertex){let x=vertex.x*this.scale.x,y=vertex.y*this.scale.y,z=vertex.z*this.scale.z;const rx=this.rotation.x,ry=this.rotation.y,rz=this.rotation.z;if(rx!==0){const c=Math.cos(rx),s=Math.sin(rx);const y1=y*c-z*s,z1=y*s+z*c;y=y1;z=z1}if(ry!==0){const c=Math.cos(ry),s=Math.sin(ry);const x1=x*c+z*s,z1=-x*s+z*c;x=x1;z=z1}if(rz!==0){const c=Math.cos(rz),s=Math.sin(rz);const x1=x*c-y*s,y1=x*s+y*c;x=x1;y=y1}return new Vec3(x+this.position.x,y+this.position.y,z+this.position.z)}
+}
+class CameraData { /* ... Same as v7 ... */
+    constructor(fovDeg=60,near=0.1,far=1000){this.fov=fovDeg*DEG_TO_RAD;this.nearClip=near;this.farClip=far;this.orbitTarget=new Vec3;}
+}
+class Mesh { /* ... Same as v7 ... */
+    constructor(n="Mesh",v=[],f=[]){this.name=n;this.verts=v;this.faces=f}static createCube(s=1){const h=s*0.5;const v=[new Vec3(-h,-h,-h),new Vec3(h,-h,-h),new Vec3(h,h,-h),new Vec3(-h,h,-h),new Vec3(-h,-h,h),new Vec3(h,-h,h),new Vec3(h,h,h),new Vec3(-h,h,h)];const f=[[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[3,7,6],[3,6,2],[0,4,7],[0,7,3],[1,2,6],[1,6,5]];return new Mesh("CubeGeom",v,f)}static createSphere(r=1,seg=16){const v=[];const fc=[];seg=Math.max(3,seg);const rings=Math.max(2,Math.floor(seg/2)+1);v.push(new Vec3(0,r,0));for(let i=1;i<rings;i++){const phi=(i/rings)*Math.PI;for(let j=0;j<seg;j++){const theta=(j/seg)*2*Math.PI;v.push(new Vec3(r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta)));}}v.push(new Vec3(0,-r,0));const tPI=0,bPI=v.length-1;for(let j=0;j<seg;j++){fc.push([tPI,1+((j+1)%seg),1+j]);}for(let i=0;i<rings-2;i++){const r1SI=1+i*seg,r2SI=1+(i+1)*seg;for(let j=0;j<seg;j++){const v1=r1SI+j,v2=r1SI+((j+1)%seg),v3=r2SI+j,v4=r2SI+((j+1)%seg);fc.push([v1,v2,v4]);fc.push([v1,v4,v3]);}}const lrSI=1+(rings-2)*seg;for(let j=0;j<seg;j++){fc.push([bPI,lrSI+j,lrSI+((j+1)%seg)]);}return new Mesh(`SphereGeom.${seg}x${rings}`,v,fc)}static createCameraGizmo(s=0.5){const v=[new Vec3(0,0,0),new Vec3(-s,-s*.75,s*1.5),new Vec3(s,-s*.75,s*1.5),new Vec3(s,s*.75,s*1.5),new Vec3(-s,s*.75,s*1.5),new Vec3(0,s*1.1,s*1.2)];const f=[[0,1,2],[0,2,3],[0,3,4],[0,4,1],[1,4,3],[1,3,2],[3,4,5]];return new Mesh("CameraGizmo",v,f)}
+}
+class Object3D { /* ... Same as v7 ... */
+    constructor(name="Object"){this.id=Object3D.nextId++;this.name=name;this.transform=new Transform();this.meshData=null;this.cameraData=null;this.gizmoMesh=null;this.parent=null;this.children=[];this.visible=true;}
+    static nextId=0;
+    getWorldTransform(){return this.transform;} 
+    getCameraBasisVectors(){if(!this.cameraData)return null;const worldPos=this.getWorldTransform().position,target=this.cameraData.orbitTarget;let forward=target.sub(worldPos).normalize();if(forward.length()<1e-6){const rZ=this.transform.rotation.z,rY=this.transform.rotation.y;forward=new Vec3(Math.sin(rY)*Math.cos(rZ),-Math.sin(rZ),Math.cos(rY)*Math.cos(rZ)).normalize();if(forward.length()<1e-6)forward=new Vec3(0,0,-1)}let worldUp=new Vec3(0,1,0),right=worldUp.cross(forward).normalize();if(right.length()<1e-6){const camRotZ=this.transform.rotation.z;right=new Vec3(Math.cos(camRotZ),Math.sin(camRotZ),0).normalize();if(Math.abs(forward.y)>.999||right.length()<1e-6)right=new Vec3(1,0,0)}let up=forward.cross(right).normalize();return{position:worldPos,forward,right,up};}
+}
+class Scene { /* ... Same as v7 ... */
+    constructor(){this.objects=[];this.activeCameraObject=null;this.lightDirection=new Vec3(.5,.8,.3).normalize();}addObject(o){this.objects.push(o);}removeObject(o){this.objects=this.objects.filter(obj=>obj!==o);if(o.parent)o.parent.children=o.parent.children.filter(c=>c!==o);o.children.forEach(c=>c.parent=null);o.parent=null;}getObjectById(id){return this.objects.find(o=>o.id===id);}setActiveCamera(cO){if(cO&&cO.cameraData){this.activeCameraObject=cO;console.log(`Active cam: ${cO.name}`)}else console.warn("Invalid active cam");}getCameras(){return this.objects.filter(o=>o.cameraData);}
 }
 
-// ---------- Geometry Generators --------------
-function createCube(size=1){
-  const s=size*0.5;
-  const v=[
-    new Vec3(-s,-s,-s), new Vec3(s,-s,-s),  new Vec3(s,s,-s),  new Vec3(-s,s,-s), // back
-    new Vec3(-s,-s,s),  new Vec3(s,-s,s),   new Vec3(s,s,s),   new Vec3(-s,s,s)   // front
-  ];
-  const f=[
-    [0,1,2],[0,2,3], // back
-    [4,6,5],[4,7,6], // front
-    [4,5,1],[4,1,0], // bottom
-    [7,3,2],[7,2,6], // top
-    [5,6,2],[5,2,1], // right
-    [4,0,3],[4,3,7]  // left
-  ];
-  return {verts:v, faces:f};
-}
-
-function createSphere(radius=1, seg=16){
-  const verts=[]; const faces=[];
-  for(let y=0;y<=seg;y++){
-    const v=y/seg;
-    const phi=v*Math.PI; // 0..pi
-    for(let x=0;x<=seg;x++){
-      const u=x/seg;
-      const theta=u*2*Math.PI;
-      const px=radius*Math.cos(theta)*Math.sin(phi);
-      const py=radius*Math.cos(phi);
-      const pz=radius*Math.sin(theta)*Math.sin(phi);
-      verts.push(new Vec3(px,py,pz));
+// Utility for point-in-polygon test
+function isPointInPolygon(point, polygonVertices) {
+    // Ray casting algorithm
+    let x = point.x, y = point.y;
+    let inside = false;
+    for (let i = 0, j = polygonVertices.length - 1; i < polygonVertices.length; j = i++) {
+        let xi = polygonVertices[i].x, yi = polygonVertices[i].y;
+        let xj = polygonVertices[j].x, yj = polygonVertices[j].y;
+        let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
     }
-  }
-  const seg1=seg+1;
-  for(let y=0;y<seg;y++){
-    for(let x=0;x<seg;x++){
-      const a=seg1*y+x;
-      const b=a+1;
-      const c=a+seg1+1;
-      const d=a+seg1;
-      if(y!==0) faces.push([a,b,d]);
-      if(y!==seg-1) faces.push([b,c,d]);
+    return inside;
+}
+
+class SVGRenderer {
+    constructor(svg){this.svgElement=svg;this.wireframe=false;this.selectedObjectId=null; this.renderableFaces = []; /* NEW: For picking */}
+    project(wVert,camBasis,camFOV,vpW,vpH,nearClip){const rel=wVert.sub(camBasis.position);const x=rel.dot(camBasis.right),y=rel.dot(camBasis.up),z=rel.dot(camBasis.forward);if(z<=nearClip)return null;const aspect=vpW/vpH,f=1/Math.tan(camFOV*.5);const nX=(x*f/aspect)/z,nY=(y*f)/z;return{x:(nX*.5+.5)*vpW,y:(-nY*.5+.5)*vpH,depth:z};}
+    render(scene,vpCam){
+        if(!scene||!vpCam||!vpCam.cameraData){this.svgElement.innerHTML='<text x="10" y="20" fill="red">No active camera.</text>';return}
+        const{width:w,height:h}=this.svgElement.getBoundingClientRect();if(w===0||h===0)return;
+        this.svgElement.innerHTML='';
+        const facesToDraw=[];
+        this.renderableFaces = []; // NEW: Clear for new frame
+
+        const camBasis=vpCam.getCameraBasisVectors();
+        if(!camBasis){this.svgElement.innerHTML='<text x="10" y="20" fill="red">Invalid cam basis.</text>';return;}
+        const camFOV=vpCam.cameraData.fov,camNearClip=vpCam.cameraData.nearClip;
+
+        for(const obj of scene.objects){
+            if(!obj.visible)continue;
+            const objTrans=obj.getWorldTransform(); 
+            let meshR=obj.meshData,isGiz=false;
+            if(obj.cameraData&&obj!==vpCam&&obj.gizmoMesh){meshR=obj.gizmoMesh;isGiz=true;}
+            if(!meshR)continue;
+            const wVerts=meshR.verts.map(vL=>objTrans.applyToVertex(vL)); 
+            for(const fIdx of meshR.faces){
+                if(fIdx.length<3)continue;
+                const vW=fIdx.map(i=>wVerts[i]),pS=vW.map(vrt=>this.project(vrt,camBasis,camFOV,w,h,camNearClip));
+                if(pS.some(pt=>!pt))continue; // Some points are behind camera or clipped
+
+                const normW=Vec3.computeNormal(vW[0],vW[1],vW[2]),vDir=camBasis.position.sub(vW[0]);
+                if(normW.dot(vDir)<=1e-6&&!this.wireframe&&!isGiz)continue; // Backface culling
+                
+                const NdotL=Math.max(0,normW.dot(scene.lightDirection)),shade=isGiz?1.0:(.2+.8*NdotL),depth=(pS[0].depth+pS[1].depth+pS[2].depth)/3;
+                
+                const faceData = {objRef: obj, pts:pS, depth, shade, sel:(obj.id===this.selectedObjectId&&!isGiz), isGiz};
+                facesToDraw.push(faceData);
+                if (!isGiz) { // NEW: Only store non-gizmo faces for picking for now
+                    this.renderableFaces.push({
+                        object: obj,
+                        screenPoints: pS.map(p => ({x: p.x, y: p.y})), // Store only x,y for 2D point-in-poly
+                        depth: depth
+                    });
+                }
+            }
+        }
+        facesToDraw.sort((a,b)=>b.depth-a.depth); // Painter's algorithm
+        this.renderableFaces.sort((a,b) => a.depth - b.depth); // Sort for picking (closest first)
+
+        for(const f of facesToDraw){ /* ... SVG polygon drawing same as v7 ... */
+            const pStr=f.pts.map(p=>`${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(' '),c=Math.floor(Math.min(255,Math.max(0,255*f.shade))),poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');poly.setAttribute('points',pStr);const strC=f.sel?'#ff5555':(f.isGiz?'#aaaaff':'#0003'),fillC=f.isGiz?'none':`rgb(${c},${c},${c})`,strW=f.sel?'1.5':(f.isGiz?'1':'0.2');if(this.wireframe||f.isGiz){poly.setAttribute('fill',f.isGiz&&!this.wireframe?'#7777AA55':'none');poly.setAttribute('stroke',strC);poly.setAttribute('stroke-width',strW)}else{poly.setAttribute('fill',fillC);poly.setAttribute('stroke',strC);poly.setAttribute('stroke-width',strW)}this.svgElement.appendChild(poly);
+        }
     }
-  }
-  return {verts, faces};
 }
 
-// ---------- Scene Object & Transform --------
-class SceneObject {
-  constructor(geometry,name){
-    this.geometry=geometry;
-    this.name=name||'Obj';
-    this.position=new Vec3();
-    this.rotation=new Vec3(); // not yet exposed in UI
-    this.scale=new Vec3(1,1,1);
-  }
+class ViewportInputHandler { /* ... Same as v7 ... */
+    constructor(viewport,appRef){this.viewportElement=viewport;this.app=appRef;this.isOrbiting=false;this.isPanning=false;this.lastMousePos={x:0,y:0};this.orbitTarget=new Vec3;this.orbitRadius=8;this.panSpeed=0.0025;this.viewportElement.addEventListener('contextmenu',e=>e.preventDefault());this.viewportElement.addEventListener('mousedown',this.onMouseDown.bind(this));window.addEventListener('mouseup',this.onMouseUp.bind(this));window.addEventListener('mousemove',this.onMouseMove.bind(this));this.viewportElement.addEventListener('wheel',this.onWheel.bind(this),{passive:false});}
+    syncOrbitParametersFromActiveCamera(){const activeCamObj=this.app.scene.activeCameraObject;if(activeCamObj&&activeCamObj.cameraData){this.orbitTarget.set(activeCamObj.cameraData.orbitTarget);const directionToTarget=this.orbitTarget.sub(activeCamObj.transform.position);this.orbitRadius=directionToTarget.length();if(this.orbitRadius<0.1){this.orbitRadius=0.1;const camBasis=activeCamObj.getCameraBasisVectors();if(camBasis&&camBasis.forward.length()>0.5){activeCamObj.transform.position=this.orbitTarget.sub(camBasis.forward.mul(this.orbitRadius))}else{activeCamObj.transform.position=this.orbitTarget.sub(new Vec3(0,0,-1).mul(this.orbitRadius))}}}else{this.orbitTarget=new Vec3(0,0,0);this.orbitRadius=8;}}
+    onMouseDown(event){event.preventDefault();const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj)return;this.syncOrbitParametersFromActiveCamera();this.lastMousePos={x:event.clientX,y:event.clientY};if(event.button===0&&!event.shiftKey){this.isOrbiting=true;this.isPanning=false;this.viewportElement.style.cursor='grabbing'}else if(event.button===1||(event.button===0&&event.shiftKey)){this.isPanning=true;this.isOrbiting=false;this.viewportElement.style.cursor='move'}}
+    onMouseUp(event){if(this.isOrbiting||this.isPanning){this.isOrbiting=false;this.isPanning=false;this.viewportElement.style.cursor='grab'}}
+    onMouseMove(event){const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj||!activeCamObj.cameraData)return;if(!this.isOrbiting&&!this.isPanning)return;const dx=event.clientX-this.lastMousePos.x,dy=event.clientY-this.lastMousePos.y;this.lastMousePos={x:event.clientX,y:event.clientY};if(this.isOrbiting){let directionFromTarget=activeCamObj.transform.position.sub(this.orbitTarget);let currentRadius=directionFromTarget.length();if(currentRadius<1e-6)currentRadius=this.orbitRadius;let theta=Math.atan2(directionFromTarget.z,directionFromTarget.x);let phi=Math.acos(directionFromTarget.y/currentRadius);theta-=dx*0.005;phi-=dy*0.005;phi=Math.max(0.01,Math.min(Math.PI-0.01,phi));activeCamObj.transform.position.x=this.orbitTarget.x+currentRadius*Math.sin(phi)*Math.cos(theta);activeCamObj.transform.position.y=this.orbitTarget.y+currentRadius*Math.cos(phi);activeCamObj.transform.position.z=this.orbitTarget.z+currentRadius*Math.sin(phi)*Math.sin(theta)}else if(this.isPanning){const camBasis=activeCamObj.getCameraBasisVectors();if(!camBasis)return;const panScale=this.orbitRadius*this.panSpeed;const panVectorX=camBasis.right.mul(-dx*panScale);const panVectorY=camBasis.up.mul(dy*panScale);const totalPanOffset=panVectorX.add(panVectorY);activeCamObj.transform.position=activeCamObj.transform.position.add(totalPanOffset);activeCamObj.cameraData.orbitTarget=activeCamObj.cameraData.orbitTarget.add(totalPanOffset);this.orbitTarget.set(activeCamObj.cameraData.orbitTarget)}if(this.app.uiManager){this.app.uiManager.updateTransformInputs();this.app.uiManager.updateCameraControls();const currentRadius=activeCamObj.transform.position.sub(this.orbitTarget).length()||this.orbitRadius;this.app.uiManager.zoomSlider.value=(currentRadius*100).toFixed(0);this.app.uiManager.zoomValDisplay.textContent=(currentRadius*100).toFixed(0)}}
+    onWheel(event){event.preventDefault();const activeCamObj=this.app.scene.activeCameraObject;if(!activeCamObj||!activeCamObj.cameraData)return;this.syncOrbitParametersFromActiveCamera();const zoomSpeedFactor=Math.max(0.1,this.orbitRadius/8);const newOrbitRadius=Math.max(0.1,this.orbitRadius+(event.deltaY>0?1:-1)*0.3*zoomSpeedFactor);let directionFromTarget=activeCamObj.transform.position.sub(this.orbitTarget);if(directionFromTarget.length()<1e-6){const camBasis=activeCamObj.getCameraBasisVectors();directionFromTarget=camBasis&&camBasis.forward.length()>0.5?camBasis.forward.mul(-1):new Vec3(0,0,-1)}directionFromTarget=directionFromTarget.normalize();activeCamObj.transform.position=this.orbitTarget.add(directionFromTarget.mul(newOrbitRadius));this.orbitRadius=newOrbitRadius;if(this.app.uiManager){this.app.uiManager.zoomSlider.value=(this.orbitRadius*100).toFixed(0);this.app.uiManager.zoomValDisplay.textContent=(this.orbitRadius*100).toFixed(0);this.app.uiManager.updateTransformInputs()}}
+}
+class UIManager { /* ... Same as v7 ... */
+    constructor(app){this.app=app;this.wireframeCheckbox=document.getElementById('wireframe');this.zoomSlider=document.getElementById('zoom');this.zoomValDisplay=document.getElementById('zoomVal');this.segmentsSlider=document.getElementById('segments');this.segValDisplay=document.getElementById('segVal');this.camDebugDisplay=document.getElementById('camDebug');this.objectListSelect=document.getElementById('objectList');this.activeCameraSelect=document.getElementById('activeCameraList');this.addCubeButton=document.getElementById('addCube');this.addSphereButton=document.getElementById('addSphere');this.addCameraButton=document.getElementById('addCamera');this.posXInput=document.getElementById('posX');this.posYInput=document.getElementById('posY');this.posZInput=document.getElementById('posZ');this.rotXInput=document.getElementById('rotX');this.rotYInput=document.getElementById('rotY');this.rotZInput=document.getElementById('rotZ');this.scaleAllInput=document.getElementById('scaleAll');this.cameraControlsDiv=document.getElementById('cameraControls');this.camFovSlider=document.getElementById('camFov');this.camFovValDisplay=document.getElementById('camFovVal');this.camTargetXInput=document.getElementById('camTargetX');this.camTargetYInput=document.getElementById('camTargetY');this.camTargetZInput=document.getElementById('camTargetZ');this.bottomBar=document.getElementById('bottombar');this.initEventListeners();this.initPanelToggle()}
+    initPanelToggle(){document.querySelectorAll('.panel-header').forEach(header=>{header.addEventListener('click',()=>{const targetId=header.dataset.target,content=document.getElementById(targetId);content.classList.toggle('hidden');header.textContent=(content.classList.contains('hidden')?'►':'▼')+' '+header.textContent.substring(2)})})}
+    initEventListeners(){this.wireframeCheckbox.addEventListener('change',()=>this.app.setWireframe(this.wireframeCheckbox.checked));this.zoomSlider.addEventListener('input',()=>{const camObj=this.app.scene.activeCameraObject;if(camObj&&camObj.cameraData){const newR=parseFloat(this.zoomSlider.value)/100;this.app.viewportInputHandler.orbitRadius=newR;let dir=camObj.transform.position.sub(camObj.cameraData.orbitTarget).normalize();if(dir.length()===0)dir=new Vec3(0,0,-1);camObj.transform.position=camObj.cameraData.orbitTarget.add(dir.mul(newR));this.app.uiManager.updateTransformInputs();this.app.uiManager.updateCameraControls()}this.zoomValDisplay.textContent=this.zoomSlider.value});this.segmentsSlider.addEventListener('input',()=>{const s=parseInt(this.segmentsSlider.value);this.segValDisplay.textContent=s.toString();this.app.setSphereSegments(s);if(this.app.selectedObject?.meshData?.name.startsWith("SphereGeom")){this.app.updateSelectedObjectGeometry(Mesh.createSphere(1,s))}});this.addCubeButton.addEventListener('click',()=>this.app.addPrimitive('cube'));this.addSphereButton.addEventListener('click',()=>this.app.addPrimitive('sphere'));this.addCameraButton.addEventListener('click',()=>this.app.addPrimitive('camera'));this.objectListSelect.addEventListener('change',e=>{const id=parseInt(e.target.value);this.app.selectObjectById(isNaN(id)?null:id)});this.activeCameraSelect.addEventListener('change',e=>{const id=parseInt(e.target.value),camObj=this.app.scene.getObjectById(id);if(camObj)this.app.scene.setActiveCamera(camObj);this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera();this.updateUIFromAppState()});['X','Y','Z'].forEach(ax=>{document.getElementById(`pos${ax}`).addEventListener('input',e=>{if(this.app.selectedObject)this.app.selectedObject.transform.position[ax.toLowerCase()]=parseFloat(e.target.value)||0;this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()});document.getElementById(`rot${ax}`).addEventListener('input',e=>{if(this.app.selectedObject)this.app.selectedObject.transform.rotation[ax.toLowerCase()]=(parseFloat(e.target.value)||0)*DEG_TO_RAD;this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()});document.getElementById(`camTarget${ax}`).addEventListener('input',e=>{const selCam=this.app.selectedObject;if(selCam?.cameraData){selCam.cameraData.orbitTarget[ax.toLowerCase()]=parseFloat(e.target.value)||0}if(this.app.scene.activeCameraObject===selCam){this.app.viewportInputHandler.syncOrbitParametersFromActiveCamera()}})});this.scaleAllInput.addEventListener('input',e=>{if(this.app.selectedObject){const v=Math.max(.01,parseFloat(e.target.value)||1);this.app.selectedObject.transform.scale=new Vec3(v,v,v)}});this.camFovSlider.addEventListener('input',e=>{if(this.app.selectedObject?.cameraData){const fov=parseFloat(e.target.value);this.app.selectedObject.cameraData.fov=fov*DEG_TO_RAD;this.camFovValDisplay.textContent=fov.toString()}})}
+    updateUIFromAppState(){if(!this.app)return;this.wireframeCheckbox.checked=this.app.renderer.wireframe;const camObj=this.app.scene.activeCameraObject;if(camObj&&camObj.cameraData){const r=this.app.viewportInputHandler.orbitRadius;this.zoomSlider.value=(r*100).toFixed(0);this.zoomValDisplay.textContent=(r*100).toFixed(0)}this.segmentsSlider.value=this.app.sphereSegments.toString();this.segValDisplay.textContent=this.app.sphereSegments.toString();this.refreshObjectList();this.refreshActiveCameraList();this.updateTransformInputs();this.updateCameraControls()}
+    refreshObjectList(){if(!this.app)return;const sId=this.app.selectedObject?.id;this.objectListSelect.innerHTML='';if(this.app.scene.objects.length===0){const o=document.createElement('option');o.textContent="(No objects)";o.disabled=true;this.objectListSelect.appendChild(o);if(this.app.selectedObject)this.app.selectObjectById(null);return}this.app.scene.objects.forEach(obj=>{const o=document.createElement('option');o.value=obj.id;o.textContent=`${obj.cameraData?'📷':(obj.meshData?.name.includes("Cube")?'🧊':(obj.meshData?.name.includes("Sphere")?'ሉ':'📦'))} ${obj.name}`;if(obj.id===sId)o.selected=true;this.objectListSelect.appendChild(o)});let sV=this.app.selectedObject&&this.app.scene.objects.some(o=>o.id===this.app.selectedObject.id);if((!sV||!this.app.selectedObject)&&this.app.scene.objects.length>0){this.objectListSelect.selectedIndex=0;this.app.selectObjectById(parseInt(this.objectListSelect.value))}}
+    refreshActiveCameraList(){if(!this.app)return;const cACId=this.app.scene.activeCameraObject?.id;this.activeCameraSelect.innerHTML='';const cOs=this.app.scene.getCameras();if(cOs.length===0){const opt=document.createElement('option');opt.textContent="(No cameras)";opt.disabled=true;this.activeCameraSelect.appendChild(opt)}else{cOs.forEach(cO=>{const opt=document.createElement('option');opt.value=cO.id;opt.textContent=cO.name;if(cO.id===cACId)opt.selected=true;this.activeCameraSelect.appendChild(opt)})}}
+    updateTransformInputs(){if(!this.app)return;const s=this.app.selectedObject,d=!s;this.posXInput.value=s?.transform.position.x.toFixed(2)||'0.00';this.posXInput.disabled=d;this.posYInput.value=s?.transform.position.y.toFixed(2)||'0.00';this.posYInput.disabled=d;this.posZInput.value=s?.transform.position.z.toFixed(2)||'0.00';this.posZInput.disabled=d;this.rotXInput.value=s?(s.transform.rotation.x*RAD_TO_DEG).toFixed(1):'0.0';this.rotXInput.disabled=d;this.rotYInput.value=s?(s.transform.rotation.y*RAD_TO_DEG).toFixed(1):'0.0';this.rotYInput.disabled=d;this.rotZInput.value=s?(s.transform.rotation.z*RAD_TO_DEG).toFixed(1):'0.0';this.rotZInput.disabled=d;this.scaleAllInput.value=s?.transform.scale.x.toFixed(2)||'1.00';this.scaleAllInput.disabled=d}
+    updateCameraControls(){if(!this.app||!this.app.selectedObject?.cameraData){this.cameraControlsDiv.style.display='none';return}this.cameraControlsDiv.style.display='block';const cD=this.app.selectedObject.cameraData;const fovD=(cD.fov*RAD_TO_DEG).toFixed(0);this.camFovSlider.value=fovD;this.camFovValDisplay.textContent=fovD;this.camTargetXInput.value=cD.orbitTarget.x.toFixed(2);this.camTargetYInput.value=cD.orbitTarget.y.toFixed(2);this.camTargetZInput.value=cD.orbitTarget.z.toFixed(2)}
+    updateCameraDebug(){if(!this.app?.scene?.activeCameraObject?.cameraData){this.camDebugDisplay.innerHTML="<b>Cam</b>: (No active cam)";return}const cO=this.app.scene.activeCameraObject,b=cO.getCameraBasisVectors();if(!b){this.camDebugDisplay.innerHTML=`<b>Cam: ${cO.name}</b> (Inv Basis)`;return}this.camDebugDisplay.innerHTML=`<b>Viewport: ${cO.name}</b><br>P:(${b.position.x.toFixed(1)},${b.position.y.toFixed(1)},${b.position.z.toFixed(1)})<br>FOV:${(cO.cameraData.fov*RAD_TO_DEG).toFixed(0)} T:(${cO.cameraData.orbitTarget.x.toFixed(1)},${cO.cameraData.orbitTarget.y.toFixed(1)},${cO.cameraData.orbitTarget.z.toFixed(1)})`}
+    setStatus(m){this.bottomBar.textContent=m}
 }
 
-function transformVertex(v,obj){
-  // scale
-  let x=v.x*obj.scale.x, y=v.y*obj.scale.y, z=v.z*obj.scale.z;
-  // rotation (Euler X->Y->Z)
-  const rx=obj.rotation.x, ry=obj.rotation.y, rz=obj.rotation.z;
-  if(rx!==0){ const c=Math.cos(rx),s=Math.sin(rx); const y1=y*c - z*s; const z1=y*s + z*c; y=y1; z=z1; }
-  if(ry!==0){ const c=Math.cos(ry),s=Math.sin(ry); const x1=x*c + z*s; const z1=-x*s + z*c; x=x1; z=z1; }
-  if(rz!==0){ const c=Math.cos(rz),s=Math.sin(rz); const x1=x*c - y*s; const y1=x*s + y*c; x=x1; y=y1; }
-  // translate
-  return new Vec3(x+obj.position.x, y+obj.position.y, z+obj.position.z);
-}
+class App {
+    constructor(){
+        this.svgElement=document.getElementById('svg3d');
+        this.scene=new Scene();
+        this.renderer=new SVGRenderer(this.svgElement);
+        this.selectedObject=null;
+        this.sphereSegments=16;
+        this.viewportInputHandler=new ViewportInputHandler(document.getElementById('viewport'),this); // Corrected
+        this.uiManager=new UIManager(this);
+        this.initDefaultCamera();
+        this.uiManager.updateUIFromAppState();
 
-// ---------- Camera ---------------------------
-class Camera {
-  constructor(){
-    this.orbit={radius:8, theta:Math.PI/4, phi:Math.PI/4};
-    this.target=new Vec3(0,0,0);
-    this.fov=60*Math.PI/180;
-    this.position=new Vec3();
-    this.update();
-  }
-  update(){
-    const {radius,theta,phi}=this.orbit;
-    this.position=new Vec3(
-      radius*Math.sin(phi)*Math.cos(theta),
-      radius*Math.cos(phi),
-      radius*Math.sin(phi)*Math.sin(theta)
-    );
-    // Build camera basis
-    this.forward=this.target.sub(this.position).normalize();
-    this.right=(new Vec3(0,1,0)).cross(this.forward).normalize();
-    this.up=this.forward.cross(this.right).normalize();
-  }
-  project(v, w, h){
-    const rel=v.sub(this.position);
-    const x=rel.dot(this.right);
-    const y=rel.dot(this.up);
-    const z=rel.dot(this.forward);
-    if(z<=0) return null; // behind camera
-    const aspect=w/h;
-    const f=1/Math.tan(this.fov*0.5);
-    const ndcX=(x*f/aspect)/z;
-    const ndcY=(y*f)/z;
-    const sx=(ndcX*0.5+0.5)*w;
-    const sy=(-ndcY*0.5+0.5)*h;
-    return {x:sx,y:sy,z};
-  }
-}
-
-// ---------- Scene & Engine ------------------
-class Engine {
-  constructor(svg){
-    this.svg=svg;
-    this.camera=new Camera();
-    this.lightDir=new Vec3(1,-1,-0.5).normalize();
-    this.objects=[];
-    this.selected=null;
-    this.wireframe=false;
-    this.addObject(createCube(), 'Cube');
-    this.resize();
-    window.addEventListener('resize',()=>this.resize());
-  }
-  addObject(geo,name){
-    const obj=new SceneObject(geo,name);
-    this.objects.push(obj);
-    if(!this.selected) this.selected=obj;
-    return obj;
-  }
-  render(){
-    const {width,height}=this.svg.getBoundingClientRect();
-    this.svg.innerHTML='';
-    const facesToDraw=[];
-    for(const obj of this.objects){
-      const {verts,faces}=obj.geometry;
-      for(const f of faces){
-        const tv0=transformVertex(verts[f[0]],obj);
-        const tv1=transformVertex(verts[f[1]],obj);
-        const tv2=transformVertex(verts[f[2]],obj);
-        const proj0=this.camera.project(tv0,width,height);
-        const proj1=this.camera.project(tv1,width,height);
-        const proj2=this.camera.project(tv2,width,height);
-        if(!proj0||!proj1||!proj2) continue;
-        const normal=computeNormal(tv0,tv1,tv2);
-        const shade=Math.max(0,normal.dot(this.lightDir));
-        const depth=(proj0.z+proj1.z+proj2.z)/3;
-        facesToDraw.push({pts:[proj0,proj1,proj2],depth,shade,sel:obj===this.selected});
-      }
+        // NEW: Add click listener to SVG for object selection
+        this.svgElement.addEventListener('click', this.handleViewportClick.bind(this));
     }
-    facesToDraw.sort((a,b)=>b.depth-a.depth);
-    for(const f of facesToDraw){
-      const pts=f.pts.map(p=>`${p.x},${p.y}`).join(' ');
-      const c=Math.floor(200*f.shade+30);
-      const poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
-      poly.setAttribute('points',pts);
-      if(this.wireframe){
-        poly.setAttribute('fill','none');
-        poly.setAttribute('stroke',f.sel?'#f00':`rgb(${c},${c},${c})`);
-        poly.setAttribute('stroke-width',f.sel?'2':'1');
-      }else{
-        poly.setAttribute('fill',`rgb(${c},${c},${c})`);
-        poly.setAttribute('stroke',f.sel?'#f00':'#0008');
-        poly.setAttribute('stroke-width',f.sel?'1':'0.5');
-      }
-      this.svg.appendChild(poly);
+
+    handleViewportClick(event) {
+        if (this.viewportInputHandler.isOrbiting || this.viewportInputHandler.isPanning) {
+            // Don't select if click was end of a drag operation for orbit/pan
+            return;
+        }
+
+        const rect = this.svgElement.getBoundingClientRect();
+        const clickPoint = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+
+        let bestHit = null;
+        // Iterate through renderableFaces, which are already sorted by depth (closest first) by the renderer
+        for (const faceInfo of this.renderer.renderableFaces) {
+            if (isPointInPolygon(clickPoint, faceInfo.screenPoints)) {
+                bestHit = faceInfo.object; // Since sorted by depth, first hit is the one
+                break; 
+            }
+        }
+
+        if (bestHit) {
+            this.selectObjectById(bestHit.id);
+            this.uiManager.setStatus(`Selected ${bestHit.name} from viewport.`);
+        } else {
+            this.selectObjectById(null); // Clicked on empty space
+            this.uiManager.setStatus("Clicked empty space.");
+        }
     }
-  }
-  resize(){
-    this.svg.setAttribute('width',window.innerWidth);
-    this.svg.setAttribute('height',window.innerHeight);
-  }
+
+    initDefaultCamera(){const dCO=new Object3D(this.generateUniqueName("Camera"));dCO.cameraData=new CameraData(60);dCO.transform.position=new Vec3(0,2,5);dCO.cameraData.orbitTarget=new Vec3(0,0,0);this.scene.addObject(dCO);this.scene.setActiveCamera(dCO);this.viewportInputHandler.syncOrbitParametersFromActiveCamera();}
+    init(){this.addPrimitive('cube');this.selectObjectById(this.scene.objects[0].id);this.resizeViewport();window.addEventListener('resize',()=>this.resizeViewport());this.gameLoop();this.uiManager.setStatus("Ready.")}
+    resizeViewport(){}
+    addPrimitive(type){let bN,nO;if(type==='cube'){bN='Cube';nO=new Object3D(this.generateUniqueName(bN));nO.meshData=Mesh.createCube(1);}else if(type==='sphere'){bN='Sphere';nO=new Object3D(this.generateUniqueName(bN));nO.meshData=Mesh.createSphere(1,this.sphereSegments);}else if(type==='camera'){bN='Camera';nO=new Object3D(this.generateUniqueName(bN));nO.cameraData=new CameraData();nO.gizmoMesh=Mesh.createCameraGizmo();const actCamPos=this.scene.activeCameraObject?.transform.position||new Vec3(0,0,5);nO.transform.position=actCamPos.add(new Vec3(1,0,-1));nO.cameraData.orbitTarget=new Vec3(0,0,0);}else{this.uiManager?.setStatus(`Error:Type ${type}`);return null;}this.scene.addObject(nO);this.selectObjectById(nO.id);if(type==='camera')this.uiManager.refreshActiveCameraList();this.uiManager?.setStatus(`Added ${nO.name}`);return nO;}
+    generateUniqueName(bN){let n=bN,c=0;const eN=new Set(this.scene.objects.map(o=>o.name));if(eN.has(n)){c=1;do{n=`${bN}.${String(c++).padStart(3,'0')}`; }while(eN.has(n));}return n;}
+    selectObjectById(id){this.selectedObject=(id===null)?null:this.scene.getObjectById(id);this.renderer.selectedObjectId=this.selectedObject?.id||null;if(this.uiManager){this.uiManager.refreshObjectList();this.uiManager.updateTransformInputs();this.uiManager.updateCameraControls();if(this.selectedObject)this.uiManager.setStatus(`Selected: ${this.selectedObject.name}`);else this.uiManager.setStatus(this.scene.objects.length>0?`Sel. cleared.`:`Scene empty.`);}}
+    setWireframe(wf){this.renderer.wireframe=wf;this.uiManager?.setStatus(`Wireframe ${wf?'On':'Off'}`);}
+    setSphereSegments(s){this.sphereSegments=Math.max(3,s);this.uiManager?.setStatus(`Sphere segs:${this.sphereSegments}`);}
+    updateSelectedObjectGeometry(nMD){if(this.selectedObject?.meshData){this.selectedObject.meshData=nMD;if(nMD.name)this.selectedObject.meshData.name=nMD.name;this.uiManager?.setStatus(`Updated geom for ${this.selectedObject.name}`);}}
+    gameLoop(){if(this.scene.activeCameraObject){this.renderer.render(this.scene,this.scene.activeCameraObject);}else{this.renderer.svgElement.innerHTML='<text x="10" y="20" fill="red">Critical: No active camera object in scene.</text>';}this.uiManager?.updateCameraDebug();requestAnimationFrame(()=>this.gameLoop());}
 }
-
-function computeNormal(a,b,c){
-  return b.sub(a).cross(c.sub(a)).normalize();
-}
-
-// ---------- Main Setup ----------------------
-window.addEventListener('DOMContentLoaded',()=>{
-  const svg=document.getElementById('svg3d');
-  const wireChk=document.getElementById('wireframe');
-  const zoomSlider=document.getElementById('zoom');
-  const segSlider=document.getElementById('segments');
-  const zoomVal=document.getElementById('zoomVal');
-  const segVal=document.getElementById('segVal');
-  const camDebug=document.getElementById('camDebug');
-
-  const objList=document.getElementById('objectList');
-  const addCubeBtn=document.getElementById('addCube');
-  const addSphereBtn=document.getElementById('addSphere');
-  const posX=document.getElementById('posX');
-  const posY=document.getElementById('posY');
-  const posZ=document.getElementById('posZ');
-  const scaleAll=document.getElementById('scaleAll');
-
-  const engine=new Engine(svg);
-  window.engine=engine;
-
-  function refreshObjectList(){
-    objList.innerHTML='';
-    engine.objects.forEach((o,i)=>{
-      const opt=document.createElement('option');
-      opt.textContent=o.name+" "+(i+1);
-      opt.value=i;
-      objList.appendChild(opt);
-    });
-    objList.selectedIndex=engine.objects.indexOf(engine.selected);
-  }
-  function updateTransformInputs(){
-    if(!engine.selected) return;
-    posX.value=engine.selected.position.x.toFixed(2);
-    posY.value=engine.selected.position.y.toFixed(2);
-    posZ.value=engine.selected.position.z.toFixed(2);
-    scaleAll.value=engine.selected.scale.x.toFixed(2);
-  }
-  refreshObjectList();
-  updateTransformInputs();
-
-  objList.addEventListener('change',()=>{
-    engine.selected=engine.objects[objList.selectedIndex];
-    updateTransformInputs();
-  });
-
-  addCubeBtn.onclick=()=>{
-    const obj=engine.addObject(createCube(), 'Cube');
-    engine.selected=obj;
-    refreshObjectList();
-    updateTransformInputs();
-  };
-  addSphereBtn.onclick=()=>{
-    const obj=engine.addObject(createSphere(1,parseInt(segSlider.value)), 'Sphere');
-    engine.selected=obj;
-    refreshObjectList();
-    updateTransformInputs();
-  };
-
-  posX.addEventListener('input',()=>{ if(engine.selected){ engine.selected.position.x=parseFloat(posX.value)||0; }});
-  posY.addEventListener('input',()=>{ if(engine.selected){ engine.selected.position.y=parseFloat(posY.value)||0; }});
-  posZ.addEventListener('input',()=>{ if(engine.selected){ engine.selected.position.z=parseFloat(posZ.value)||0; }});
-  scaleAll.addEventListener('input',()=>{ if(engine.selected){ const v=parseFloat(scaleAll.value)||1; engine.selected.scale=new Vec3(v,v,v);} });
-
-  wireChk.addEventListener('change',()=>{engine.wireframe=wireChk.checked;});
-  zoomSlider.addEventListener('input',()=>{
-    engine.camera.orbit.radius=parseFloat(zoomSlider.value)/100;
-    zoomVal.textContent=zoomSlider.value;
-  });
-  segSlider.addEventListener('input',()=>{
-    segVal.textContent=segSlider.value;
-    if(engine.selected) engine.selected.geometry=createSphere(1,parseInt(segSlider.value));
-  });
-
-  let dragging=false; let lastX=0; let lastY=0;
-  svg.addEventListener('mousedown',e=>{dragging=true; lastX=e.clientX; lastY=e.clientY;});
-  window.addEventListener('mouseup',()=>dragging=false);
-  window.addEventListener('mousemove',e=>{
-    if(!dragging) return;
-    const dx=e.clientX-lastX; const dy=e.clientY-lastY;
-    lastX=e.clientX; lastY=e.clientY;
-    const cam=engine.camera;
-    cam.orbit.theta-=dx*0.005;
-    cam.orbit.phi=Math.min(Math.max(0.01,cam.orbit.phi+dy*0.005),Math.PI-0.01);
-  });
-  svg.addEventListener('wheel',e=>{
-    e.preventDefault();
-    const delta=e.deltaY>0?1:-1;
-    engine.camera.orbit.radius=Math.max(0.5,engine.camera.orbit.radius+delta*0.3);
-    zoomSlider.value=(engine.camera.orbit.radius*100).toFixed(0);
-    zoomVal.textContent=zoomSlider.value;
-  },{passive:false});
-
-  function update(){
-    engine.camera.update();
-    engine.render();
-    camDebug.innerHTML=`<b>Camera</b><br>
-     Pos: (${engine.camera.position.x.toFixed(2)}, ${engine.camera.position.y.toFixed(2)}, ${engine.camera.position.z.toFixed(2)})<br>
-     Orbit: r=${engine.camera.orbit.radius.toFixed(2)}, θ=${(engine.camera.orbit.theta*180/Math.PI).toFixed(1)}°, φ=${(engine.camera.orbit.phi*180/Math.PI).toFixed(1)}°`;
-    requestAnimationFrame(update);
-  }
-  update();
-});
+window.addEventListener('DOMContentLoaded',()=>{const app=new App();window.myApp=app;app.init();});
 </script>
 </body>
 </html>
